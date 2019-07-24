@@ -7,4 +7,4 @@ hidden/
 stuff/
 src/
 tf_data_merge_indices/
-data/
+__pycache__
