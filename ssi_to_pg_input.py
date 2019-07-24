@@ -28,7 +28,7 @@ FLAGS = flags.FLAGS
 # Where to find data
 flags.DEFINE_string('dataset_name', 'cnn_dm', 'Which dataset to use. Makes a log dir based on name.\
                                                 Must be one of {tac_2011, tac_2008, duc_2004, duc_tac, cnn_dm} or a custom dataset name')
-flags.DEFINE_string('data_root', os.path.expanduser('~') + '/data/tf_data/with_coref_and_ssi_and_tag_tokens', 'Path to root directory for all datasets (already converted to TensorFlow examples).')
+flags.DEFINE_string('data_root', os.path.expanduser('~') + '/data/tf_data/with_coref_and_ssi', 'Path to root directory for all datasets (already converted to TensorFlow examples).')
 flags.DEFINE_string('vocab_path', 'logs/vocab', 'Path expression to text vocabulary file.')
 flags.DEFINE_string('pretrained_path', '', 'Directory of pretrained model for PG trained on singles or pairs of sentences.')
 flags.DEFINE_boolean('use_pretrained', True, 'If True, use pretrained model in the path FLAGS.pretrained_path.')
@@ -129,7 +129,7 @@ lambdamart_in_dir = 'data/temp/to_lambdamart'
 lambdamart_out_dir = 'data/temp/lambdamart_results'
 ssi_out_dir = 'data/temp/ssi'
 log_dir = 'logs'
-names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string'), ('corefs', 'json'), ('article_lcs_paths_list', 'delimited_list_of_list_of_lists')]
+names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string'), ('corefs', 'json')]
 
 
 def main(unused_argv):
@@ -147,11 +147,11 @@ def main(unused_argv):
         pretrained_dataset = 'cnn_dm'
     if FLAGS.singles_and_pairs == 'both':
         FLAGS.exp_name = FLAGS.dataset_name + '_' + FLAGS.exp_name + extractor + '_both'
-        FLAGS.pretrained_path = os.path.join(FLAGS.log_root, pretrained_dataset + '_sent')
+        FLAGS.pretrained_path = os.path.join(FLAGS.log_root, pretrained_dataset + '_both')
         dataset_articles = FLAGS.dataset_name
     else:
         FLAGS.exp_name = FLAGS.dataset_name + '_' + FLAGS.exp_name + extractor + '_singles'
-        FLAGS.pretrained_path = os.path.join(FLAGS.log_root, pretrained_dataset + '_sent' + '_singles')
+        FLAGS.pretrained_path = os.path.join(FLAGS.log_root, pretrained_dataset + '_singles')
         dataset_articles = FLAGS.dataset_name + '_singles'
     if FLAGS.word_imp_reg:
         FLAGS.pretrained_path += '_imp' + str(FLAGS.imp_loss_wt)
@@ -159,6 +159,10 @@ def main(unused_argv):
 
 
     bert_suffix = ''
+    # if FLAGS.use_bert:
+    #     if FLAGS.sentemb:
+    #         FLAGS.exp_name += '_sentemb'
+    #         # bert_suffix += '_sentemb'
     if FLAGS.use_bert:
         if FLAGS.sentemb:
             FLAGS.exp_name += '_sentemb'

@@ -30,7 +30,7 @@ p_start_tag = '<P>'
 p_end_tag = '</P>'
 
 kaiqiang_dataset_names = ['gigaword', 'cnndm_1to1', 'newsroom', 'websplit']
-kaiqiang_data_dir = os.path.expanduser('~') + '/data'
+kaiqiang_data_dir = 'data'
 
 def process_dataset(dataset_name, out_data_path, should_write_with_generator, TAC_path='', DUC_path='', custom_dataset_path='', dataset_split='all'):
     data_dirs = {
@@ -349,7 +349,7 @@ def main(unused_argv):
 if __name__ == '__main__':
     flags.DEFINE_string('dataset_name', 'example_custom_dataset', 'Which dataset to convert from raw data to tf examples')
     flags.DEFINE_string('dataset_split', 'all', 'Which dataset to convert from raw data to tf examples')
-    flags.DEFINE_string('out_data_path', os.path.expanduser('~') + '/data/tf_data', 'Where to put output tf examples')
+    flags.DEFINE_string('out_data_path', os.path.expanduser('~') + '/data/tf_data/with_coref_and_ssi', 'Where to put output tf examples')
     flags.DEFINE_string('TAC_path', '', 'Path to raw TAC data.')
     flags.DEFINE_string('DUC_path', '', 'Path to raw DUC data.')
     flags.DEFINE_boolean('write_with_generator', True, 'Whether or not to write with generator, which will batch the examples together.')

@@ -14,7 +14,9 @@ try:
 except:
     a=0
 import tempfile
-tempfile.tempdir = os.path.expanduser('~') + "/tmp"
+tempfile.tempdir = "tmp"
+if not os.path.exists(tempfile.tempdir):
+    os.makedirs(tempfile.tempdir)
 
 def _ngrams(words, n):
     queue = collections.deque(maxlen=n)

@@ -37,7 +37,6 @@ import rouge_functions
 import importance_features
 import convert_data
 from batcher import create_batch
-import attn_selections
 import ssi_functions
 
 FLAGS = flags.FLAGS
@@ -104,7 +103,6 @@ class BeamSearchDecoder(object):
             batch = self._batcher.next_batch()	# 1 example repeated across batch
             if batch is None: # finished decoding dataset in single_pass mode
                 assert FLAGS.single_pass, "Dataset exhausted, but we are not in single_pass mode"
-                attn_selections.process_attn_selections(attn_dir, self._decode_dir, self._vocab)
                 logging.info("Decoder has finished reading dataset for single_pass.")
                 logging.info("Output has been saved in %s and %s.", self._rouge_ref_dir, self._rouge_dec_dir)
                 if len(os.listdir(self._rouge_ref_dir)) != 0:
@@ -130,9 +128,6 @@ class BeamSearchDecoder(object):
                 if FLAGS.attn_vis:
                     self.write_for_attnvis(article_withunks, abstract_withunks, decoded_words, best_hyp.attn_dists, best_hyp.p_gens, counter) # write info to .json file for visualization tool
 
-                    if counter % 1000 == 0:
-                        attn_selections.process_attn_selections(attn_dir, self._decode_dir, self._vocab)
-
                 counter += 1 # this is how many examples we've decoded
             else:
                 print_results(article_withunks, abstract_withunks, decoded_output) # log output to screen
@@ -150,7 +145,7 @@ class BeamSearchDecoder(object):
     def decode_iteratively(self, example_generator, total, names_to_types, ssi_list, hps):
         attn_vis_idx = 0
         for example_idx, example in enumerate(tqdm(example_generator, total=total)):
-            raw_article_sents, groundtruth_similar_source_indices_list, groundtruth_summary_text, corefs, groundtruth_article_lcs_paths_list = util.unpack_tf_example(
+            raw_article_sents, groundtruth_similar_source_indices_list, groundtruth_summary_text, corefs = util.unpack_tf_example(
                 example, names_to_types)
             article_sent_tokens = [util.process_sent(sent) for sent in raw_article_sents]
             groundtruth_summ_sents = [[sent.strip() for sent in groundtruth_summary_text.strip().split('\n')]]
@@ -173,7 +168,7 @@ class BeamSearchDecoder(object):
                     groundtruth_similar_source_indices_list = util.enforce_sentence_limit(groundtruth_similar_source_indices_list, 2)
                     gt_ssi = util.enforce_sentence_limit(gt_ssi, 2)
                 if gt_ssi != groundtruth_similar_source_indices_list:
-                    raise Exception('Example %d has different groundtruth source indices: ' + str(groundtruth_similar_source_indices_list) + ' || ' + str(gt_ssi))
+                    print('Warning: Example %d has different groundtruth source indices: ' + str(groundtruth_similar_source_indices_list) + ' || ' + str(gt_ssi))
                 if FLAGS.dataset_name == 'xsum':
                     sys_ssi = [sys_ssi[0]]
 
@@ -182,7 +177,6 @@ class BeamSearchDecoder(object):
             best_hyps = []
             highlight_html_total = ''
             for ssi_idx, ssi in enumerate(sys_ssi):
-                selected_article_lcs_paths = None
                 # selected_article_lcs_paths = article_lcs_paths_list[ssi_idx]
                 # ssi, selected_article_lcs_paths = util.make_ssi_chronological(ssi, selected_article_lcs_paths)
                 # selected_article_lcs_paths = [selected_article_lcs_paths]
@@ -194,7 +188,7 @@ class BeamSearchDecoder(object):
                 else:
                     selected_groundtruth_summ_sent = groundtruth_summ_sents
 
-                batch = create_batch(selected_article_text, selected_groundtruth_summ_sent, selected_doc_indices_str, selected_raw_article_sents, selected_article_lcs_paths, FLAGS.batch_size, hps, self._vocab)
+                batch = create_batch(selected_article_text, selected_groundtruth_summ_sent, selected_doc_indices_str, selected_raw_article_sents, FLAGS.batch_size, hps, self._vocab)
 
                 original_article = batch.original_articles[0]  # string
                 original_abstract = batch.original_abstracts[0]  # string
@@ -217,7 +211,7 @@ class BeamSearchDecoder(object):
                     min_matched_tokens = 2
                     selected_article_sent_tokens = [util.process_sent(sent) for sent in selected_raw_article_sents]
                     highlight_summary_sent_tokens = [decoded_words]
-                    highlight_ssi_list, lcs_paths_list, highlight_article_lcs_paths_list, highlight_smooth_article_lcs_paths_list = ssi_functions.get_simple_source_indices_list(
+                    highlight_ssi_list, lcs_paths_list, highlight_smooth_article_lcs_paths_list = ssi_functions.get_simple_source_indices_list(
                         highlight_summary_sent_tokens,
                         selected_article_sent_tokens, None, 2, min_matched_tokens)
                     highlighted_html = ssi_functions.html_highlight_sents_in_article(highlight_summary_sent_tokens,
@@ -239,10 +233,6 @@ class BeamSearchDecoder(object):
             if example_idx < 1000:
                 self.write_for_human(raw_article_sents, groundtruth_summ_sents, final_decoded_words, example_idx)
                 ssi_functions.write_highlighted_html(highlight_html_total, self._highlight_dir, example_idx)
-
-            # if example_idx % 100 == 0:
-            #     attn_dir = os.path.join(self._decode_dir, 'attn_vis_data')
-            #     attn_selections.process_attn_selections(attn_dir, self._decode_dir, self._vocab)
 
             rouge_functions.write_for_rouge(groundtruth_summ_sents, None, example_idx, self._rouge_ref_dir, self._rouge_dec_dir, decoded_words=final_decoded_words, log=False) # write ref summary and decoded summary to file, to eval with pyrouge later
             # if FLAGS.attn_vis:

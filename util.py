@@ -26,9 +26,7 @@ from absl import flags
 import itertools
 import data
 from absl import logging
-from nltk.stem.porter import PorterStemmer
 from nltk.corpus import stopwords
-from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import inspect
 import string
@@ -177,8 +175,14 @@ def calc_ROUGE_L_score(candidate, reference, metric='f1'):
         # compute the longest common subsequence
         lcs = my_lcs(ref, candidate)
         try:
-            prec.append(lcs / float(len(candidate)))
-            rec.append(lcs / float(len(ref)))
+            if len(candidate) == 0:
+                prec.append(0.)
+            else:
+                prec.append(lcs / float(len(candidate)))
+            if len(ref) == 0:
+                rec.append(0.)
+            else:
+                rec.append(lcs / float(len(ref)))
         except:
             print('Candidate', candidate)
             print('Reference', ref)
@@ -288,7 +292,6 @@ def get_similarity(enc_tokens, summ_tokens, vocab):
     importances_hat = rouge_l_similarity(enc_tokens, summ_tokens_combined, vocab, metric=metric)
     return importances_hat
 
-# @profile
 def rouge_l_similarity(article_sents, abstract_sents, vocab, metric='f1'):
     sentence_similarity = np.zeros([len(article_sents)], dtype=float)
     abstract_sents_removed_periods = remove_period_ids(abstract_sents, vocab)
@@ -336,26 +339,6 @@ def rouge_2_similarity_matrix(article_sents, abstract_sents, vocab, metric, shou
             sentence_similarity_matrix[article_sent_idx, abstract_sent_idx] = rouge
     return sentence_similarity_matrix
 
-
-
-stemmer = PorterStemmer()
-class StemmedTfidfVectorizer(TfidfVectorizer):
-    def build_analyzer(self):
-        analyzer = super(TfidfVectorizer, self).build_analyzer()
-        return lambda doc: (stemmer.stem(w) for w in analyzer(doc))
-tfidf_vectorizer = StemmedTfidfVectorizer(analyzer='word', stop_words='english', ngram_range=(1, 3), max_df=0.7)
-err_tfidf_vectorizer = StemmedTfidfVectorizer(analyzer='word', stop_words='english', ngram_range=(1, 3), max_df=1.0)
-
-def get_tfidf_matrix(sentences):
-    try:
-        sent_term_matrix = tfidf_vectorizer.fit_transform(sentences)
-    except:
-        try:
-            sent_term_matrix = err_tfidf_vectorizer.fit_transform(sentences)
-        except:
-            raise
-    return sent_term_matrix
-
 def write_to_temp_files(string_list, temp_dir):
     file_paths = []
     for s_idx, s in enumerate(string_list):
@@ -366,23 +349,16 @@ def write_to_temp_files(string_list, temp_dir):
     return file_paths
 
 
-def get_doc_substituted_tfidf_matrix(tfidf_vectorizer, sentences, article_text, pca=None):
-    # file_paths = write_to_temp_files([article_text], temp_dir)
-    # doc_vec = tfidf_vectorizer.transform(file_paths)
-    # file_paths = write_to_temp_files(sentences, temp_dir)
-    # sent_term_matrix = tfidf_vectorizer.transform(file_paths)
+def get_doc_substituted_tfidf_matrix(tfidf_vectorizer, sentences, article_text):
 
-    sent_term_matrix = tfidf_transform_then_pca(tfidf_vectorizer, sentences, pca)
+    sent_term_matrix = tfidf_transform(tfidf_vectorizer, sentences)
 
-    # doc_vec = tfidf_vectorizer.transform([article_text])
-    # sent_term_matrix = tfidf_vectorizer.transform(sentences)
-    if pca is None:
-        doc_vec = tfidf_transform_then_pca(tfidf_vectorizer, [article_text], pca)
-        nonzero_rows, nonzero_cols = sent_term_matrix.nonzero()
-        nonzero_indices = list(zip(nonzero_rows, nonzero_cols))
-        for idx in nonzero_indices:
-            val = doc_vec[0, idx[1]]
-            sent_term_matrix[idx] = val
+    doc_vec = tfidf_transform(tfidf_vectorizer, [article_text])
+    nonzero_rows, nonzero_cols = sent_term_matrix.nonzero()
+    nonzero_indices = list(zip(nonzero_rows, nonzero_cols))
+    for idx in nonzero_indices:
+        val = doc_vec[0, idx[1]]
+        sent_term_matrix[idx] = val
     return sent_term_matrix
 
 def chunk_file(set_name, out_full_dir, out_dir, chunk_size=1000):
@@ -405,14 +381,6 @@ def chunk_file(set_name, out_full_dir, out_dir, chunk_size=1000):
       chunk += 1
 
 def decode_text(text):
-    # # print (python_version)
-    # # if python_version == 3:
-    # #     if isinstance(text, str):
-    # #         text = text.encode()
-    # #         print ("String: " + str(isinstance(text, str)))
-    # #         print ("btyes: " + str(isinstance(text, bytes)))
-    # #         return text
-    # # else:
     try:
         text = text.decode('utf-8')
     except:
@@ -423,14 +391,6 @@ def decode_text(text):
     return text
 
 def encode_text(text):
-    # # print (python_version)
-    # # if python_version == 3:
-    # #     if isinstance(text, str):
-    # #         text = text.encode()
-    # #         print ("String: " + str(isinstance(text, str)))
-    # #         print ("btyes: " + str(isinstance(text, bytes)))
-    # #         return text
-    # # else:
     try:
         text = text.encode('utf-8')
     except:
@@ -487,16 +447,17 @@ def unpack_tf_example(example, names_to_types):
                 res.append(None)
                 continue
             else:
-                return [None] * len(names_to_types)
-                # print example
-                # raise Exception('%s is not a feature of TF Example' % name)
+                # raise Exception()
+                # return [None] * len(names_to_types)
+                print(example)
+                raise Exception('%s is not a feature of TF Example' % name)
         res.append(func[type](name))
     return res
 
 # def get_tfidf_importances(raw_article_sents, tfidf_model_path=None):
-def get_tfidf_importances(tfidf_vectorizer, raw_article_sents, pca=None):
+def get_tfidf_importances(tfidf_vectorizer, raw_article_sents):
     article_text = ' '.join(raw_article_sents)
-    sent_reps = get_doc_substituted_tfidf_matrix(tfidf_vectorizer, raw_article_sents, article_text, pca)
+    sent_reps = get_doc_substituted_tfidf_matrix(tfidf_vectorizer, raw_article_sents, article_text)
     cluster_rep = np.mean(sent_reps, axis=0).reshape(1, -1)
     similarity_matrix = cosine_similarity(sent_reps, cluster_rep)
     return np.squeeze(similarity_matrix, 1)
@@ -529,14 +490,6 @@ def combine_sim_and_imp_dict(similarities_dict, importances_dict, lambda_val=0.6
             raise
     return mmr
 
-def calc_MMR(raw_article_sents, article_sent_tokens, summ_tokens, vocab, importances=None):
-    if importances is None:
-        importances = get_tfidf_importances(raw_article_sents)
-    importances = special_squash(importances)
-    similarities = rouge_l_similarity(article_sent_tokens, summ_tokens, vocab, metric='precision')
-    mmr = special_squash(combine_sim_and_imp(similarities, importances))
-    return mmr
-
 # @profile
 def calc_MMR_source_indices(article_sent_tokens, summ_tokens, vocab, importances_dict, qid=None):
     if qid is not None:
@@ -546,18 +499,6 @@ def calc_MMR_source_indices(article_sent_tokens, summ_tokens, vocab, importances
     similarities_dict = singles_to_singles_pairs(similarities)
     mmr_dict = special_squash_dict(combine_sim_and_imp_dict(similarities_dict, importances_dict))
     return mmr_dict
-
-def calc_MMR_all(raw_article_sents, article_sent_tokens, summ_sent_tokens, vocab):
-    all_mmr = []
-    summ_tokens_so_far = []
-    mmr = calc_MMR(raw_article_sents, article_sent_tokens, summ_tokens_so_far, vocab)
-    all_mmr.append(mmr)
-    for summ_sent in summ_sent_tokens:
-        summ_tokens_so_far.extend(summ_sent)
-        mmr = calc_MMR(raw_article_sents, article_sent_tokens, summ_tokens_so_far, vocab)
-        all_mmr.append(mmr)
-    all_mmr = np.stack(all_mmr)
-    return all_mmr
 
 def special_squash(distribution):
     res = distribution - np.min(distribution)
@@ -663,10 +604,8 @@ def nCr(n,r):
     f = math.factorial
     return f(n) / f(r) / f(n-r)
 
-def tfidf_transform_then_pca(tfidf_vectorizer, texts, pca=None):
+def tfidf_transform(tfidf_vectorizer, texts):
     matrix = tfidf_vectorizer.transform(texts)
-    if pca is not None:
-        matrix = pca.transform(matrix)
     return matrix
 
 # @profile
@@ -773,26 +712,7 @@ def all_sent_selection_eval(ssi_list):
     return combined_suffix
 
 def lemmatize_sent_tokens(article_sent_tokens):
-    # article_sent_tokens_lemma = [[t.lemma_ for t in Doc(nlp.vocab, words=[token.decode('utf-8') for token in sent])] for sent in article_sent_tokens]
-    # article_sent_tokens_lemma = [[t.lemma_ for t in Doc(nlp.vocab, words=[decode_text(token) for token in sent])] for sent in article_sent_tokens]
     article_sent_tokens_lemma = [[t.lemma_ for t in Doc(nlp.vocab, words=[token for token in sent])] for sent in article_sent_tokens]
-
-    # article_sent_tokens_lemma2 = [[t.lemma_ for t in nlp2(' '.join(sent))] for sent in article_sent_tokens]
-    # for a, b in zip(flatten_list_of_lists(article_sent_tokens), flatten_list_of_lists(article_sent_tokens_lemma)):
-    #     if a != b:
-    #         print a + '\t' + b
-
-    # for a, b in zip(article_sent_tokens_lemma, article_sent_tokens_lemma2):
-    #     if len(a) != len(b):
-    #         for j in range(max(len(a) ,len(b))):
-    #             if j >= len(a):
-    #                 print '\t\t' + b[j]
-    #             elif j >= len(b):
-    #                 print a[j] + '\t\t'
-    #             else:
-    #                 print a[j] + '\t' + b[j]
-    #         print '\n\n'
-
     return article_sent_tokens_lemma
 
 average_sents_for_dataset = {

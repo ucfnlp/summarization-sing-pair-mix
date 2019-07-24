@@ -1,19 +1,9 @@
 
-from torch.nn.utils.rnn import pack_sequence
 from tqdm import tqdm
 import copy
-import util
-from absl import app
 import os
 import hashlib
-import struct
 import json
-# import stanfordnlp
-# from spacy_stanfordnlp import StanfordNLPLanguage
-
-# snlp = stanfordnlp.Pipeline(lang="en", use_gpu=False, processors='tokenize')
-# nlp = stanfordnlp.Pipeline(lang="en", use_gpu=True, processors='tokenize')
-# nlp = StanfordNLPLanguage(snlp)
 
 dm_single_close_quote = '\u2019' # unicode
 dm_double_close_quote = '\u201d'
@@ -25,12 +15,17 @@ SENTENCE_END = '</s>'
 CHUNK_SIZE = 1000 # num examples per chunk, for the chunked data
 out_full_dir = os.path.join('data/cnn_dm_processed')
 
-all_train_urls = "data/cnn_dm_unprocessed/url_lists/all_train.txt"
-all_val_urls = "data/cnn_dm_unprocessed/url_lists/all_val.txt"
-all_test_urls = "data/cnn_dm_unprocessed/url_lists/all_test.txt"
+# all_train_urls = "data/cnn_dm_unprocessed/url_lists/all_train.txt"
+# all_val_urls = "data/cnn_dm_unprocessed/url_lists/all_val.txt"
+# all_test_urls = "data/cnn_dm_unprocessed/url_lists/all_test.txt"
+# cnn_tokenized_stories_dir = 'data/cnn_dm_unprocessed/cnn_stories_tokenized'
+# dm_tokenized_stories_dir = 'data/cnn_dm_unprocessed/dm_stories_tokenized'
 
-cnn_tokenized_stories_dir = 'data/cnn_dm_unprocessed/cnn_stories_tokenized'
-dm_tokenized_stories_dir = 'data/cnn_dm_unprocessed/dm_stories_tokenized'
+all_train_urls = "/home/logan/data/url_lists/all_train.txt"
+all_val_urls = "/home/logan/data/url_lists/all_val.txt"
+all_test_urls = "/home/logan/data/url_lists/all_test.txt"
+cnn_tokenized_stories_dir = '/home/logan/data/cnn_stories_tokenized'
+dm_tokenized_stories_dir = '/home/logan/data/dm_stories_tokenized'
 
 
 # These are the number of .story files we expect there to be in cnn_stories_dir and dm_stories_dir
@@ -67,12 +62,44 @@ def fix_missing_period(line):
   # print line[-1]
   return line + " ."
 
+def move_from_quote_end_to_sent_end(tokens, cur_end_idx):
+    spots_left_to_check = 5
+    new_end_idx = cur_end_idx
+    for i in range(1, spots_left_to_check+1):
+        if cur_end_idx+i >= len(tokens):
+            break
+        if tokens[cur_end_idx+i] == '.':
+            new_end_idx = cur_end_idx+i
+            break
+    return new_end_idx
+
+def sent_tokenize_paragraph(tokens):
+  sents = []
+  while len(tokens) > 0:
+      idx = next((i for i in range(len(tokens)) if (tokens[i] == '.' or tokens[i] == '?')), len(tokens)-1)
+      if tokens[idx] == '?':
+          is_part_of_quote = False
+          if idx+1 < len(tokens) and tokens[idx+1] == "'":
+              idx = idx + 1
+              is_part_of_quote = True
+          if idx+1 < len(tokens) and tokens[idx+1] == "''":
+              idx = idx + 1
+              is_part_of_quote = True
+          if is_part_of_quote:
+              idx = move_from_quote_end_to_sent_end(tokens, idx)
+      else:
+          if idx+1 < len(tokens) and tokens[idx+1] == "'":
+              idx = idx + 1
+          if idx+1 < len(tokens) and tokens[idx+1] == "''":
+              idx = idx + 1
+      sent = tokens[:idx+1]
+      if len(sent) > 0:
+          sents.append(' '.join(sent))
+      tokens = tokens[idx+1:]
+  return sents
 
 def get_art_abs(story_file):
   lines = read_text_file(story_file)
-
-  # Lowercase everything
-  # lines = [line.lower() for line in lines]
 
   # Put periods on the ends of lines that are missing them (this is a problem in the dataset because many image captions don't end in periods; consequently they end up in the body of the article as run-on sentences)
   lines = [fix_missing_period(line) for line in lines]
@@ -89,29 +116,10 @@ def get_art_abs(story_file):
     elif next_is_highlight:
       highlights.append(line)
     else:
+      # Each line is a paragraph that contains 1 or more sentences
       tokens = line.split(' ')
-      while len(tokens) > 0:
-          idx = next((i for i in range(len(tokens)) if tokens[i] == '.'), len(tokens)-1)
-          if idx+1 < len(tokens) and tokens[idx+1] == "'":
-              idx = idx + 1
-          if idx+1 < len(tokens) and tokens[idx+1] == "''":
-              idx = idx + 1
-          sent = tokens[:idx+1]
-          article_sents.append(' '.join(sent))
-          tokens = tokens[idx+1:]
-
-  # Make article into a single string
-  # article = ' '.join(article_sents)
-  # if article == '':
-  #     article_sents = []
-  # else:
-  #     doc = nlp(article)
-  #     article_sents = [' '.join([token._text for token in sent._tokens]) for sent in doc.sentences]
-  # sents = doc.sents
-  # article_sents = [sent.text for sent in sents]
-
-  # Make abstract into a signle string, putting <s> and </s> tags around the sentences
-  # abstract = ' '.join(["%s %s %s" % (SENTENCE_START, sent, SENTENCE_END) for sent in highlights])
+      sents = sent_tokenize_paragraph(tokens)   # uses some heuristics to tokenize the paragraphs into sentences
+      article_sents.extend(sents)
 
   return article_sents, highlights
 
@@ -185,7 +193,8 @@ def write_to_bin(url_file, dataset_split):
   story_fnames = [s+".story" for s in url_hashes]
   num_stories = len(story_fnames)
   out_split_dir = os.path.join(out_full_dir, dataset_split)
-  util.create_dirs(out_split_dir)
+  if not os.path.exists(out_split_dir):
+      os.makedirs(out_split_dir)
 
   out_art = os.path.join(out_split_dir, 'articles.tsv')
   out_abs = os.path.join(out_split_dir, 'summaries.tsv')
@@ -213,8 +222,6 @@ def write_to_bin(url_file, dataset_split):
 
       # Get the strings to write to .bin file
       article_sents, abstract_sents = get_art_abs(story_file)
-      # article_sents = [sent.encode() for sent in article_sents]
-      # abstract_sents = [sent.encode() for sent in abstract_sents]
 
       article_line = '\t'.join(article_sents) + '\n'
       abstract_line = '\t'.join(abstract_sents) + '\n'
@@ -225,12 +232,9 @@ def write_to_bin(url_file, dataset_split):
   print("Finished writing file %s\n" % url_file)
 
 
-def main(unused_argv):
-
-    if len(unused_argv) != 1: # prints a message if you've entered flags incorrectly
-        raise Exception("Problem with flags: %s" % unused_argv)
-
-    util.create_dirs(out_full_dir)
+def main():
+    if not os.path.exists(out_full_dir):
+        os.makedirs(out_full_dir)
 
     write_to_bin(all_test_urls, 'test')
     write_to_bin(all_val_urls, 'val')
@@ -238,7 +242,7 @@ def main(unused_argv):
 
 
 if __name__ == '__main__':
-    app.run(main)
+    main()
 
 
 

@@ -21,7 +21,7 @@ trap intexit INT
 
 dataset_name=cnn_dm
 mode=train
-singles_and_pairs=singles
+singles_and_pairs=both
 
 cuda=0
 max_enc_steps=100

@@ -169,15 +169,11 @@ class FullTokenizer(object):
 
   def tokenize(self, text):
     split_tokens = []
-    mappings = []
-    tokens, basic_mappings = self.basic_tokenizer.tokenize(text)
-    for token_idx, token in enumerate(tokens):
-      basic_mapping = basic_mappings[token_idx]
+    for token in self.basic_tokenizer.tokenize(text):
       for sub_token in self.wordpiece_tokenizer.tokenize(token):
         split_tokens.append(sub_token)
-        mappings.append(basic_mapping)
 
-    return split_tokens, mappings
+    return split_tokens
 
   def convert_tokens_to_ids(self, tokens):
     return convert_by_vocab(self.vocab, tokens)
@@ -212,19 +208,14 @@ class BasicTokenizer(object):
 
     orig_tokens = whitespace_tokenize(text)
     split_tokens = []
-    mappings = []
-    for token_idx, token in enumerate(orig_tokens):
+    for token in orig_tokens:
       if self.do_lower_case:
         token = token.lower()
         token = self._run_strip_accents(token)
-      split_token = self._run_split_on_punc(token)
-      split_tokens.extend(split_token)
-      mapping = [token_idx] * len(split_token)
-      mappings.append(mapping)
+      split_tokens.extend(self._run_split_on_punc(token))
 
     output_tokens = whitespace_tokenize(" ".join(split_tokens))
-    assert len(output_tokens) == len(mappings), ' '.join(output_tokens) + '\n' + ' '.join([str(mapping) for mapping in mappings])
-    return output_tokens, mappings
+    return output_tokens
 
   def _run_strip_accents(self, text):
     """Strips accents from a piece of text."""

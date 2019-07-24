@@ -1,23 +1,17 @@
 from tqdm import tqdm
-from scoop import futures
 import rouge_functions
 from absl import flags
 from absl import app
-import convert_data
 import time
-import subprocess
-import itertools
 import glob
 import numpy as np
 import data
 import os
 import sys
-from collections import defaultdict
 import util
-from scipy import sparse
 from ssi_functions import html_highlight_sents_in_article, get_simple_source_indices_list
 import pickle
-# from profilestats import profile
+import ssi_functions
 
 if 'dataset_name' in flags.FLAGS:
     flags_already_done = True
@@ -29,16 +23,8 @@ if 'singles_and_pairs' not in flags.FLAGS:
     flags.DEFINE_string('singles_and_pairs', 'singles', 'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
 if 'dataset_name' not in flags.FLAGS:
     flags.DEFINE_string('dataset_name', 'cnn_dm', 'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
-if 'start_over' not in flags.FLAGS:
-    flags.DEFINE_boolean('start_over', True, 'Which mode to run in. Must be in {write_to_file, generate_summaries}.')
-if 'first_k' not in flags.FLAGS:
-    flags.DEFINE_integer('first_k', 20, 'Specifies k, where we consider only the first k sentences of each article. Only applied when [running on both singles and pairs, and not running on cnn_dm]')
 if 'upper_bound' not in flags.FLAGS:
     flags.DEFINE_boolean('upper_bound', False, 'Which mode to run in. Must be in {write_to_file, generate_summaries}.')
-if 'use_pair_criteria' not in flags.FLAGS:
-    flags.DEFINE_boolean('use_pair_criteria', False, 'Which mode to run in. Must be in {write_to_file, generate_summaries}.')
-if 'pca' not in flags.FLAGS:
-    flags.DEFINE_boolean('pca', False, 'Which mode to run in. Must be in {write_to_file, generate_summaries}.')
 if 'num_instances' not in flags.FLAGS:
     flags.DEFINE_integer('num_instances', -1, 'Which mode to run in. Must be in {write_to_file, generate_summaries}.')
 if 'sent_position_criteria' not in flags.FLAGS:
@@ -55,8 +41,6 @@ if not flags_already_done:
     FLAGS(sys.argv)
 
 _exp_name = 'bert'
-if FLAGS.pca:
-    model += '_pca'
 tfidf_model = 'all'
 dataset_split = 'test'
 importance = True
@@ -68,8 +52,10 @@ min_matched_tokens = 2
 # singles_and_pairs = 'singles'
 include_tfidf_vec = True
 
-data_dir = os.path.expanduser('~') + '/data/tf_data/with_coref_and_ssi'
+data_dir = os.path.expanduser('~') + '/data/tf_data/with_coref_and_ssi_and_tag_tokens'
+# bert_in_dir = os.path.join('data', 'bert', FLAGS.dataset_name, FLAGS.singles_and_pairs, 'input')
 bert_in_dir = os.path.join('data', 'bert', FLAGS.dataset_name, FLAGS.singles_and_pairs, 'input')
+# bert_scores_dir = os.path.join('data', 'bert', FLAGS.dataset_name, FLAGS.singles_and_pairs, 'output')
 bert_scores_dir = os.path.join('data', 'bert', FLAGS.dataset_name, FLAGS.singles_and_pairs, 'output')
 ssi_out_dir = 'data/temp/' + FLAGS.dataset_name + '/ssi'
 log_dir = 'logs'
@@ -92,11 +78,12 @@ if FLAGS.plushidden:
     exp_name += '_plushidden'
     bert_scores_dir += '_plushidden'
 
+# if FLAGS.sentemb:
+    # exp_name += '_sentemb'
+    # bert_scores_dir += '_sentemb'
+
 if FLAGS.upper_bound:
     exp_name = exp_name + '_upperbound'
-
-if FLAGS.pca:
-    exp_name = exp_name + '_pca'
 
 
 if FLAGS.singles_and_pairs == 'singles':
@@ -109,10 +96,6 @@ else:
 # else:
 #     l_param = 100
 l_param = 100
-
-if FLAGS.pca:
-    bert_in_dir += '_pca'
-    bert_scores_dir += '_pca'
 temp_in_path = os.path.join(bert_in_dir, 'test.tsv')
 temp_out_path = os.path.join(bert_scores_dir, 'test_results.tsv')
 util.create_dirs(bert_scores_dir)
@@ -237,46 +220,6 @@ def example_generator_extended(example_generator, total, single_feat_len, pair_f
             break
         yield (example, example_idx, single_feat_len, pair_feat_len, singles_and_pairs)
 
-# @profile
-def write_highlighted_html(html, out_dir, example_idx):
-    html = '''
-    
-<button id="btnPrev" class="float-left submit-button" >Prev</button>
-<button id="btnNext" class="float-left submit-button" >Next</button>
-<br><br>
-
-<script type="text/javascript">
-    document.getElementById("btnPrev").onclick = function () {
-        location.href = "%06d_highlighted.html";
-    };
-    document.getElementById("btnNext").onclick = function () {
-        location.href = "%06d_highlighted.html";
-    };
-    
-    document.addEventListener("keyup",function(e){
-   var key = e.which||e.keyCode;
-   switch(key){
-      //left arrow
-      case 37:
-         document.getElementById("btnPrev").click();
-      break;
-      //right arrow
-      case 39:
-         document.getElementById("btnNext").click();
-      break;
-   }
-});
-</script>
-
-''' % (example_idx-1, example_idx+1) + html
-    path = os.path.join(out_dir, '%06d_highlighted.html' % example_idx)
-    with open(path, 'w') as f:
-        f.write(html)
-
-def get_indices_of_first_k_sents_of_each_article(rel_sent_indices, k):
-    indices = [idx for idx, rel_sent_idx in enumerate(rel_sent_indices) if rel_sent_idx < k]
-    return indices
-
 def evaluate_example(ex):
     example, example_idx, qid_ssi_to_importances, _, _ = ex
     print(example_idx)
@@ -313,7 +256,7 @@ def evaluate_example(ex):
 
             all_html = '<u>System Summary</u><br><br>' + extracted_sents_in_article_html + '<u>Groundtruth Summary</u><br><br>' + groundtruth_highlighted_html
             # all_html = '<u>System Summary</u><br><br>' + extracted_sents_in_article_html
-            write_highlighted_html(all_html, html_dir, example_idx)
+            ssi_functions.write_highlighted_html(all_html, html_dir, example_idx)
     rouge_functions.write_for_rouge(groundtruth_summ_sents, summary_sents, example_idx, ref_dir, dec_dir)
     return (groundtruth_similar_source_indices_list, similar_source_indices_list, ssi_length_extractive)
 
@@ -341,12 +284,12 @@ def main(unused_argv):
     ex_gen = example_generator_extended(example_generator, total, qid_ssi_to_importances, None, FLAGS.singles_and_pairs)
     print('Creating list')
     ex_list = [ex for ex in ex_gen]
-    ssi_list = list(futures.map(evaluate_example, ex_list))
+    ssi_list = list(map(evaluate_example, ex_list))
 
     # save ssi_list
-    with open(os.path.join(my_log_dir, 'ssi.pkl'), 'w') as f:
+    with open(os.path.join(my_log_dir, 'ssi.pkl'), 'wb') as f:
         pickle.dump(ssi_list, f)
-    with open(os.path.join(my_log_dir, 'ssi.pkl')) as f:
+    with open(os.path.join(my_log_dir, 'ssi.pkl'), 'rb') as f:
         ssi_list = pickle.load(f)
     print('Evaluating BERT model F1 score...')
     suffix = util.all_sent_selection_eval(ssi_list)

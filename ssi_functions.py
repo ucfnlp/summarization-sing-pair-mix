@@ -4,7 +4,6 @@ import numpy as np
 from absl import flags
 FLAGS = flags.FLAGS
 
-# @profile
 def write_highlighted_html(html, out_dir, example_idx):
     html = '''
 
@@ -150,7 +149,7 @@ def get_sent_similarities(summ_sent, article_sent_tokens, vocab):
     similarities = (rouge_l + rouge_1 + rouge_2) / 3.0
     return similarities
 
-def get_simple_source_indices_list(summary_sent_tokens, article_sent_tokens, vocab, sentence_limit, min_matched_tokens):
+def get_simple_source_indices_list(summary_sent_tokens, article_sent_tokens, vocab=None, sentence_limit=2, min_matched_tokens=2):
     article_sent_tokens_lemma = util.lemmatize_sent_tokens(article_sent_tokens)
     summary_sent_tokens_lemma = util.lemmatize_sent_tokens(summary_sent_tokens)
 
@@ -175,7 +174,7 @@ def get_simple_source_indices_list(summary_sent_tokens, article_sent_tokens, voc
     simple_similar_source_indices = [tuple(sim_source_ind[0]) for sim_source_ind in deduplicated_similar_source_indices_list]
     lcs_paths_list = [tuple(sim_source_ind[0]) for sim_source_ind in lcs_paths_list]
     smooth_article_paths_list = [tuple(sim_source_ind[0]) for sim_source_ind in smooth_article_paths_list]
-    return simple_similar_source_indices, lcs_paths_list, article_lcs_paths_list, smooth_article_paths_list
+    return simple_similar_source_indices, lcs_paths_list, smooth_article_paths_list
 
 
 # Recursive function
@@ -195,7 +194,7 @@ def get_similar_source_sents_by_lcs(summ_sent, partial_summ_sent, selection, art
     top_similarities = util.reorder(similarities, top_sent_indices)
     top_sent_indices = [x for _, x in sorted(zip(top_similarities, top_sent_indices), key=lambda pair: pair[0])][::-1]
     for top_sent_idx in top_sent_indices:
-        nonstopword_matches, _ = util.matching_unigrams(partial_summ_sent, article_sent_tokens[top_sent_idx])
+        nonstopword_matches, _ = util.matching_unigrams(partial_summ_sent, article_sent_tokens[top_sent_idx], should_remove_stop_words=True)
         lcs_len, (summ_lcs_path, _) = util.matching_unigrams(partial_summ_sent, article_sent_tokens[top_sent_idx])
         smooth_article_path = get_smooth_path(summ_sent, article_sent_tokens[top_sent_idx])
         if len(nonstopword_matches) < min_matched_tokens:
@@ -269,13 +268,6 @@ def replace_with_blanks(summ_sent, selection):
     replaced_summ_sent = [summ_sent[token_idx] if token_idx in selection else '' for token_idx, token in enumerate(summ_sent)]
     return  replaced_summ_sent
 
-def filter_pairs_by_criteria(raw_article_sents, possible_pairs, corefs):
-    article_sent_tokens = [sent.split(' ') for sent in raw_article_sents]
-    overlap_pairs = filter_by_overlap(article_sent_tokens, possible_pairs)
-    entity_pairs = filter_by_entites(article_sent_tokens, possible_pairs, corefs)
-    new_possible_pairs = list(set(overlap_pairs).union(set(entity_pairs)))
-    return new_possible_pairs
-
 def filter_pairs_by_sent_position(possible_pairs, rel_sent_indices=None):
     max_sent_position = {
         'cnn_dm': 30,
@@ -288,8 +280,7 @@ def filter_pairs_by_sent_position(possible_pairs, rel_sent_indices=None):
         return [pair for pair in possible_pairs if max(pair) < max_sent_position[FLAGS.dataset_name]]
 
 def get_rel_sent_indices(doc_indices, article_sent_tokens):
-    if FLAGS.dataset_name != 'duc_2004' and len(doc_indices) != len(
-            util.flatten_list_of_lists(article_sent_tokens)):
+    if FLAGS.dataset_name != 'duc_2004' and len(doc_indices) != len(util.flatten_list_of_lists(article_sent_tokens)):
         doc_indices = [0] * len(util.flatten_list_of_lists(article_sent_tokens))
     doc_indices_sent_tokens = util.reshape_like(doc_indices, article_sent_tokens)
     sent_doc = [sent[0] for sent in doc_indices_sent_tokens]

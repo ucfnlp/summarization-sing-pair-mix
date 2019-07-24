@@ -154,13 +154,12 @@ if 'dataset_name' not in flags.FLAGS:
     flags.DEFINE_string('dataset_name', 'cnn_dm', 'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
 
 flags.DEFINE_bool("plushidden", True, "Whether to use TPU or GPU/CPU.")
-flags.DEFINE_bool("tag_tokens", True, "Whether to use TPU or GPU/CPU.")
 
 
 class InputExample(object):
   """A single training/test example for simple sequence classification."""
 
-  def __init__(self, guid, text_a, text_b=None, label=None, sentence_ids=None, article_embedding=None, article_lcs_paths=None):
+  def __init__(self, guid, text_a, text_b=None, label=None, sentence_ids=None, article_embedding=None):
     """Constructs a InputExample.
 
     Args:
@@ -178,7 +177,6 @@ class InputExample(object):
     self.label = label
     self.sentence_ids = sentence_ids
     self.article_embedding = article_embedding
-    self.article_lcs_paths = article_lcs_paths
 
 
 class PaddingInputExample(object):
@@ -204,8 +202,6 @@ class InputFeatures(object):
                label_id,
                sentence_ids,
                article_embedding,
-               token_labels,
-               mappings,
                is_real_example=True):
     self.input_ids = input_ids
     self.input_mask = input_mask
@@ -213,8 +209,6 @@ class InputFeatures(object):
     self.label_id = label_id
     self.sentence_ids = sentence_ids
     self.article_embedding = article_embedding
-    self.token_labels = token_labels
-    self.mappings = mappings
     self.is_real_example = is_real_example
 
 
@@ -234,10 +228,6 @@ class DataProcessor(object):
     raise NotImplementedError()
 
   def get_labels(self):
-    """Gets the list of labels for this data set."""
-    raise NotImplementedError()
-
-  def get_token_labels(self):
     """Gets the list of labels for this data set."""
     raise NotImplementedError()
 
@@ -307,7 +297,6 @@ class MergeProcessor(DataProcessor):
       else:
         label = tokenization.convert_to_unicode(line[0])
       sentence_ids = [int(idx) for idx in line[5].split()]
-      article_lcs_paths = [[int(art_idx) for art_idx in (l.strip().split(' ') if l != '' else [])] for l in line[6]]
       if json_lines:
           json_idx = example_idx + 1
           json_line = json_lines[json_idx].strip()
@@ -320,7 +309,7 @@ class MergeProcessor(DataProcessor):
       else:
           article_embedding = [0.]
 
-      yield InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label, sentence_ids=sentence_ids, article_embedding=article_embedding, article_lcs_paths=article_lcs_paths)
+      yield InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label, sentence_ids=sentence_ids, article_embedding=article_embedding)
 
     #   examples.append(
     #       InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label, sentence_ids=sentence_ids, article_embedding=article_embedding))
@@ -497,9 +486,6 @@ class ColaProcessor(DataProcessor):
           InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
     return examples
 
-def create_token_labels(mappings, article_lcs_paths):
-    return [1 if orig_token_idx in article_lcs_paths else 0 for orig_token_idx in mappings]
-
 
 def convert_single_example(ex_index, example, label_list, max_seq_length,
                            tokenizer):
@@ -513,35 +499,26 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
         label_id=0,
         sentence_ids=[0] * max_seq_length,
         article_embedding= [0] * (768 * 4),
-        token_labels=[0] * max_seq_length,
         is_real_example=False)
 
   label_map = {}
   for (i, label) in enumerate(label_list):
     label_map[label] = i
 
-  tokens_a, mappings_a = tokenizer.tokenize(example.text_a)
-  labels_a = create_token_labels(mappings_a, example.article_lcs_paths[0])
+  tokens_a = tokenizer.tokenize(example.text_a)
   tokens_b = None
-  mappings_b = None
-  labels_b = None
   if example.text_b:
-    tokens_b, mappings_b = tokenizer.tokenize(example.text_b)
-    labels_b = create_token_labels(mappings_b, example.article_lcs_paths[1])
+    tokens_b = tokenizer.tokenize(example.text_b)
 
   if tokens_b:
     # Modifies `tokens_a` and `tokens_b` in place so that the total
     # length is less than the specified length.
     # Account for [CLS], [SEP], [SEP] with "- 3"
     _truncate_seq_pair(tokens_a, tokens_b, max_seq_length - 3)
-    _truncate_seq_pair(mappings_a, mappings_b, max_seq_length - 3)
-    _truncate_seq_pair(labels_a, labels_b, max_seq_length - 3)
   else:
     # Account for [CLS] and [SEP] with "- 2"
     if len(tokens_a) > max_seq_length - 2:
       tokens_a = tokens_a[0:(max_seq_length - 2)]
-      mappings_a = mappings_a[0:(max_seq_length - 2)]
-      labels_a = labels_a[0:(max_seq_length - 2)]
 
 
 
@@ -564,38 +541,26 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
   # used as the "sentence vector". Note that this only makes sense because
   # the entire model is fine-tuned.
   tokens = []
-  token_labels = []
-  mappings = []
   segment_ids = []
   sentence_ids = []
   article_embedding = example.article_embedding
   tokens.append("[CLS]")
-  token_labels.append(0)
-  mappings.append(-1)
   segment_ids.append(0)
   sentence_ids.append(example.sentence_ids[0])
-  for token_idx, token in enumerate(tokens_a):
+  for token in tokens_a:
     tokens.append(token)
-    token_labels.append(labels_a[token_idx])
-    mappings.append(mappings_a[token_idx])
     segment_ids.append(0)
     sentence_ids.append(example.sentence_ids[0])
   tokens.append("[SEP]")
-  token_labels.append(0)
-  mappings.append(-1)
   segment_ids.append(0)
   sentence_ids.append(example.sentence_ids[0])
 
   if tokens_b:
-    for token_idx, token in enumerate(tokens_b):
+    for token in tokens_b:
       tokens.append(token)
-      token_labels.append(labels_b[token_idx])
-      mappings.append(mappings_b[token_idx])
       segment_ids.append(1)
       sentence_ids.append(example.sentence_ids[1])
     tokens.append("[SEP]")
-    token_labels.append(0)
-    mappings.append(-1)
     segment_ids.append(1)
     sentence_ids.append(example.sentence_ids[1])
 
@@ -608,15 +573,11 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
   # Zero-pad up to the sequence length.
   while len(input_ids) < max_seq_length:
     input_ids.append(0)
-    token_labels.append(0)
-    mappings.append(-2)
     input_mask.append(0)
     segment_ids.append(0)
     sentence_ids.append(0)
 
   assert len(input_ids) == max_seq_length
-  assert len(token_labels) == max_seq_length
-  assert len(mappings) == max_seq_length
   assert len(input_mask) == max_seq_length
   assert len(segment_ids) == max_seq_length
   assert len(sentence_ids) == max_seq_length
@@ -628,8 +589,6 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
     tf.logging.info("tokens: %s" % " ".join(
         [tokenization.printable_text(x) for x in tokens]))
     tf.logging.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-    tf.logging.info("token_labels: %s" % " ".join([str(x) for x in token_labels]))
-    tf.logging.info("mappings: %s" % " ".join([str(x) for x in mappings]))
     tf.logging.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
     tf.logging.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
     tf.logging.info("sentence_ids: %s" % " ".join([str(x) for x in sentence_ids]))
@@ -643,8 +602,6 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
       label_id=label_id,
       sentence_ids=sentence_ids,
       article_embedding=article_embedding,
-      token_labels=token_labels,
-      mappings=mappings,
       is_real_example=True)
   return feature
 
@@ -677,8 +634,6 @@ def file_based_convert_examples_to_features(
     features["sentence_ids"] = create_int_feature(feature.sentence_ids)
     if FLAGS.artemb:
         features["article_embedding"] = create_float_feature(feature.article_embedding)
-    features["token_labels"] = create_int_feature(feature.token_labels)
-    features["mappings"] = create_int_feature(feature.mappings)
     features["is_real_example"] = create_int_feature(
         [int(feature.is_real_example)])
 
@@ -699,8 +654,6 @@ def file_based_input_fn_builder(input_file, seq_length, is_training_or_val,
       "label_ids": tf.FixedLenFeature([], tf.int64),
       "sentence_ids": tf.FixedLenFeature([seq_length], tf.int64),
       "is_real_example": tf.FixedLenFeature([], tf.int64),
-      "token_labels": tf.FixedLenFeature([seq_length], tf.int64),
-      "mappings": tf.FixedLenFeature([seq_length], tf.int64),
   }
   if FLAGS.artemb:
     name_to_features["article_embedding"] = tf.FixedLenFeature([768*4], tf.float32)
@@ -759,7 +712,7 @@ def _truncate_seq_pair(tokens_a, tokens_b, max_length):
 
 
 def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
-                 labels, num_labels, use_one_hot_embeddings, sentence_ids, article_embedding, token_labels, mappings):
+                 labels, num_labels, use_one_hot_embeddings, sentence_ids, article_embedding):
   """Creates a classification model."""
   model = modeling.BertModel(
       config=bert_config,
@@ -814,40 +767,8 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
     log_probs = tf.nn.log_softmax(logits, axis=-1)
 
     one_hot_labels = tf.one_hot(labels, depth=num_labels, dtype=tf.float32)
-    cls_loss = -tf.reduce_sum(one_hot_labels * log_probs, axis=-1)
 
-
-
-    final_hidden = model.get_sequence_output()
-
-    final_hidden_shape = modeling.get_shape_list(final_hidden, expected_rank=3)
-    batch_size = final_hidden_shape[0]
-    seq_length = final_hidden_shape[1]
-    hidden_size_seq = final_hidden_shape[2]
-
-    output_weights_seq = tf.get_variable(
-        "cls/squad/output_weights", [2, hidden_size_seq],
-        initializer=tf.truncated_normal_initializer(stddev=0.02))
-
-    output_bias_seq = tf.get_variable(
-        "cls/squad/output_bias", [2], initializer=tf.zeros_initializer())
-
-    final_hidden_matrix = tf.reshape(final_hidden,
-                                     [batch_size * seq_length, hidden_size_seq])
-    logits_seq = tf.matmul(final_hidden_matrix, output_weights_seq, transpose_b=True)
-    logits_seq = tf.nn.bias_add(logits_seq, output_bias_seq)
-    log_probs_seq = tf.nn.log_softmax(logits_seq, axis=-1)
-
-    logits_seq = tf.reshape(logits_seq, [batch_size, seq_length, 2])
-    # logits_seq = tf.transpose(logits_seq, [2, 0, 1])
-    # token_labels_reshaped = tf.reshape(token_labels, [batch_size * seq_length])
-    one_hot_labels_seq = tf.one_hot(token_labels, depth=num_labels, dtype=tf.float32)
-    seq_loss = tf.reduce_sum(one_hot_labels_seq * log_probs_seq, axis=-1)
-    seq_loss = -tf.reduce_sum(seq_loss, axis=-1)
-
-
-
-    per_example_loss = cls_loss + seq_loss
+    per_example_loss = -tf.reduce_sum(one_hot_labels * log_probs, axis=-1)
     loss = tf.reduce_mean(per_example_loss)
 
     return (loss, per_example_loss, logits, probabilities, model.embedding_output)
@@ -966,7 +887,7 @@ def main(_):
   tokenization.validate_case_matches_checkpoint(FLAGS.do_lower_case,
                                                 FLAGS.init_checkpoint)
 
-  data_root = os.path.expanduser('~') + '/discourse/data/bert'
+  data_root = '../data/bert'
   output_folder = 'output'
   if FLAGS.sentemb:
       output_folder += '_sentemb'
@@ -1098,7 +1019,7 @@ def main(_):
 
     eval_file = os.path.join(os.path.dirname(FLAGS.output_dir), 'tfrecords', "eval.tf_record")
     create_dirs(os.path.dirname(eval_file))
-    if not os.path.exists(eval_file):
+    if not os.path.exists(eval_file) or os.stat(eval_file).st_size == 0:
         file_based_convert_examples_to_features(
             eval_example_generator, label_list, FLAGS.max_seq_length, tokenizer, eval_file, num_eval_examples_with_padding)
 
@@ -1136,7 +1057,7 @@ def main(_):
   if FLAGS.do_train:
     train_file = os.path.join(os.path.dirname(FLAGS.output_dir), 'tfrecords', "train.tf_record")
     create_dirs(os.path.dirname(train_file))
-    if not os.path.exists(train_file):
+    if not os.path.exists(train_file) or os.stat(train_file).st_size == 0:
         file_based_convert_examples_to_features(
             train_example_generator, label_list, FLAGS.max_seq_length, tokenizer, train_file, num_train_examples)
     tf.logging.info("***** Running training *****")
@@ -1188,7 +1109,7 @@ def main(_):
     predict_file = os.path.join(os.path.dirname(FLAGS.output_dir), 'tfrecords', "predict.tf_record")
     create_dirs(os.path.dirname(predict_file))
     print ("Predict file: %s" % predict_file)
-    if not os.path.exists(predict_file):
+    if not os.path.exists(predict_file) or os.stat(predict_file).st_size == 0:
         file_based_convert_examples_to_features(predict_example_generator, label_list,
                                             FLAGS.max_seq_length, tokenizer,
                                             predict_file, num_predict_examples_with_padding)
