@@ -28,7 +28,7 @@ FLAGS(sys.argv)
 
 from ssi_functions import filter_pairs_by_sent_position
 
-data_dir = os.path.expanduser('~') + '/data/tf_data/with_coref_and_ssi_and_tag_tokens'
+data_dir = os.path.expanduser('~') + '/data/tf_data/with_coref_and_ssi'
 ssi_dir = 'data/ssi'
 names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string'), ('corefs', 'json'),
                   ('doc_indices', 'delimited_list')]

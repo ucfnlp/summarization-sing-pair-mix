@@ -19,7 +19,6 @@
 import numpy as np
 import data
 from absl import flags
-import pg_mmr_functions
 import util
 
 FLAGS = flags.FLAGS
@@ -28,7 +27,7 @@ FLAGS = flags.FLAGS
 class Hypothesis(object):
     """Class to represent a hypothesis during beam search. Holds all the information needed for the hypothesis."""
 
-    def __init__(self, tokens, log_probs, state, attn_dists, p_gens, coverage, mmr, summ_sent_idx, already_added):
+    def __init__(self, tokens, log_probs, state, attn_dists, p_gens, coverage, summ_sent_idx, already_added):
         """Hypothesis constructor.
 
         Args:
@@ -46,11 +45,10 @@ class Hypothesis(object):
         self.p_gens = p_gens
         self.coverage = coverage
         self.similarity = 0.
-        self.mmr = mmr
         self.summ_sent_idx = summ_sent_idx
         self.already_added = already_added
 
-    def extend(self, token, log_prob, state, attn_dist, p_gen, coverage, mmr, summ_sent_idx):
+    def extend(self, token, log_prob, state, attn_dist, p_gen, coverage, summ_sent_idx):
         """Return a NEW hypothesis, extended with the information from the latest step of beam search.
 
         Args:
@@ -71,10 +69,10 @@ class Hypothesis(object):
                           attn_dists=self.attn_dists + [attn_dist],
                           p_gens=self.p_gens + [p_gen],
                           coverage=coverage,
-                          mmr=mmr,
                           summ_sent_idx=summ_sent_idx,
                           already_added=self.already_added)
 
+    # Trigram trick
     def does_trigram_exist(self, token):
         if len(self.tokens) < 2:
             return False
@@ -123,15 +121,6 @@ def run_beam_search(sess, model, vocab, batch, ex_index, hps):
     # dec_in_state is a LSTMStateTuple
     # enc_states has shape [batch_size, <=max_enc_steps, 2*hidden_dim].
 
-    # Sentence importance
-    enc_sentences, enc_tokens = batch.tokenized_sents[0], batch.word_ids_sents[0]
-    if FLAGS.ssi_data_path != '':   # if we are running on pg_mmr and bert
-        mmr_init = None
-    else:
-        importances = pg_mmr_functions.get_importances(model, batch, enc_states, vocab, sess, hps)
-        mmr_init = importances
-
-
     # Initialize beam_size-many hyptheses
     hyps = [Hypothesis(tokens=[vocab.word2id(data.START_DECODING)],
                        log_probs=[0.0],
@@ -139,7 +128,6 @@ def run_beam_search(sess, model, vocab, batch, ex_index, hps):
                        attn_dists=[],
                        p_gens=[],
                        coverage=np.zeros([batch.enc_batch.shape[1]]),  # zero vector of length attention_length
-                       mmr=mmr_init,
                        summ_sent_idx=0,
                        already_added=False
                        ) for hyp_idx in range(FLAGS.beam_size)]
@@ -156,27 +144,6 @@ def run_beam_search(sess, model, vocab, batch, ex_index, hps):
         states = [h.state for h in hyps]  # list of current decoder states of the hypotheses
         prev_coverage = [h.coverage for h in hyps]  # list of coverage vectors (or None)
 
-        # Mute all source sentences except the top k sentences
-        prev_mmr = [h.mmr for h in hyps]
-        if FLAGS.pg_mmr:
-            if FLAGS.ssi_data_path != '':       # if we are doing pg_mmr with bert
-                prev_mmr_for_words_list = []
-                for batch_idx in range(len(batch.ssi_masks_padded)):
-                    summ_sent_idx = hyps[batch_idx].summ_sent_idx
-                    prev_sent_idx = max(0, summ_sent_idx-1)
-                    if summ_sent_idx >= len(batch.ssi_masks_padded[batch_idx]):
-                        print ("Performing modulo on summ_sent_idx (%d) because it has generated too many sentences." % summ_sent_idx)
-                        summ_sent_idx = summ_sent_idx % len(batch.ssi_masks_padded[batch_idx])
-                        prev_sent_idx = prev_sent_idx % len(batch.ssi_masks_padded[batch_idx])
-                    prev_mmr_for_words_list.append([batch.ssi_masks_padded[batch_idx][prev_sent_idx], batch.ssi_masks_padded[batch_idx][summ_sent_idx]])
-                prev_mmr_for_words = np.array(prev_mmr_for_words_list)
-            else:
-                if FLAGS.mute_k != -1:
-                    prev_mmr = [pg_mmr_functions.mute_all_except_top_k(mmr, FLAGS.mute_k) for mmr in prev_mmr]
-                prev_mmr_for_words = [pg_mmr_functions.convert_to_word_level(mmr, enc_tokens) for mmr in prev_mmr]
-        else:
-            prev_mmr_for_words = [None for _ in prev_mmr]
-
 
         # Run one step of the decoder to get the new info
         (topk_ids, topk_log_probs, new_states, attn_dists, p_gens, new_coverage, pre_attn_dists) = model.decode_onestep(sess=sess,
@@ -184,8 +151,7 @@ def run_beam_search(sess, model, vocab, batch, ex_index, hps):
                                                                                                         latest_tokens=latest_tokens,
                                                                                                         enc_states=enc_states,
                                                                                                         dec_init_states=states,
-                                                                                                        prev_coverage=prev_coverage,
-                                                                                                        mmr_score=prev_mmr_for_words)
+                                                                                                        prev_coverage=prev_coverage)
 
         # Extend each hypothesis and collect them all in all_hyps
         all_hyps = []
@@ -203,7 +169,6 @@ def run_beam_search(sess, model, vocab, batch, ex_index, hps):
                                    attn_dist=attn_dist,
                                    p_gen=p_gen,
                                    coverage=new_coverage_i,
-                                   mmr=h.mmr,
                                    summ_sent_idx=h.summ_sent_idx)
                 all_hyps.append(new_hyp)
 
@@ -215,26 +180,11 @@ def run_beam_search(sess, model, vocab, batch, ex_index, hps):
                 if steps >= FLAGS.min_dec_steps:
                     results.append(h)
                     h.already_added = True
-                    # print 'ADDED THING'
             else:  # hasn't reached stop token, so continue to extend this hypothesis
                 hyps.append(h)
             if len(hyps) == FLAGS.beam_size or (not FLAGS.better_beam_search and len(results) == FLAGS.beam_size):
                 # Once we've collected beam_size-many hypotheses for the next step, or beam_size-many complete hypotheses, stop. (Unless it's Logan's better beam search)
                 break
-
-        # Update the MMR scores when a sentence is completed
-        if FLAGS.pg_mmr:
-            for hyp_idx, hyp in enumerate(hyps):
-                if hyp.latest_token == vocab.word2id(data.PERIOD):     # if in regular mode, and the hyp ends in a period
-                    if FLAGS.ssi_data_path != '':       # if we are doing pg_mmr with bert
-                        hyp.summ_sent_idx += 1
-                        # If we have exhausted the singletons and pairs from BERT, then put in results
-                        if hyp.summ_sent_idx >= len(batch.ssis[hyp_idx]) and not hyp.already_added:
-                            results.append(hyp)
-                            hyp.already_added = True
-                            # print 'ADDED THING 2'
-                    else:
-                        pg_mmr_functions.update_similarity_and_mmr(hyp, importances, batch, enc_tokens, vocab)
 
         steps += 1
 
@@ -246,11 +196,6 @@ def run_beam_search(sess, model, vocab, batch, ex_index, hps):
     # Sort hypotheses by average log probability
     hyps_sorted = sort_hyps(results)
     best_hyp = hyps_sorted[0]
-
-    # Save plots of the distributions (importance, similarity, mmr)
-    if FLAGS.plot_distributions and FLAGS.pg_mmr:
-        pg_mmr_functions.save_distribution_plots(importances, enc_sentences,
-                                   enc_tokens, best_hyp, batch, vocab, ex_index)
 
 
     # Return the hypothesis with highest average log prob

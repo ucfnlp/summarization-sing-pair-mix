@@ -47,11 +47,6 @@ class SummarizationModel(object):
         if FLAGS.pointer_gen:
             self._enc_batch_extend_vocab = tf.placeholder(tf.int32, [hps.batch_size, None], name='enc_batch_extend_vocab')
             self._max_art_oovs = tf.placeholder(tf.int32, [], name='max_art_oovs')
-        if FLAGS.word_imp_reg:
-            self.enc_importances = tf.placeholder(tf.float32, [hps.batch_size, None], name='enc_importances')
-        if FLAGS.tag_tokens:
-            self.importance_masks = tf.placeholder(tf.int32, [hps.batch_size, None], name='importance_masks')
-
         # decoder part
         self._dec_batch = tf.placeholder(tf.int32, [hps.batch_size, hps.max_dec_steps], name='dec_batch')
         self._target_batch = tf.placeholder(tf.int32, [hps.batch_size, hps.max_dec_steps], name='target_batch')
@@ -60,16 +55,6 @@ class SummarizationModel(object):
         if hps.mode=="decode" and hps.coverage:
             self.prev_coverage = tf.placeholder(tf.float32, [hps.batch_size, None], name='prev_coverage')
             self.token_inputs = tf.placeholder(tf.int32, [hps.batch_size, None], name='token_inputs')
-
-        if FLAGS.pg_mmr:
-            # self.mmr_score = tf.placeholder(tf.float32, [hps.batch_size, hps.max_dec_steps, None], name='mmr_score')
-            if FLAGS.ssi_data_path != '':       # if we are doing pg_mmr with bert
-                max_sentences = 2
-            else:
-                max_sentences = 10
-            self.mmr_score = tf.placeholder(tf.bool, [hps.batch_size, max_sentences, None], name='mmr_score')
-            self.batch_sent_indices = tf.placeholder(tf.int32, [hps.batch_size, hps.max_dec_steps, 2], name='batch_sent_indices')
-
 
     def _make_feed_dict(self, batch, just_enc=False):
         """Make a feed dictionary mapping parts of the batch to the appropriate placeholders.
@@ -82,23 +67,13 @@ class SummarizationModel(object):
         feed_dict[self._enc_batch] = batch.enc_batch
         feed_dict[self._enc_lens] = batch.enc_lens
         feed_dict[self._enc_padding_mask] = batch.enc_padding_mask
-        if FLAGS.word_imp_reg:
-            feed_dict[self.enc_importances] = batch.enc_importances
         if FLAGS.pointer_gen:
             feed_dict[self._enc_batch_extend_vocab] = batch.enc_batch_extend_vocab
             feed_dict[self._max_art_oovs] = batch.max_art_oovs
-        if FLAGS.tag_tokens:
-            feed_dict[self.importance_masks] = batch.importance_masks
         if not just_enc:
             feed_dict[self._dec_batch] = batch.dec_batch
             feed_dict[self._target_batch] = batch.target_batch
             feed_dict[self._dec_padding_mask] = batch.dec_padding_mask
-            if FLAGS.pg_mmr:
-                # feed_dict[self.mmr_score] = batch.ssi_masks_per_timestep
-                # print batch.ssi_masks_padded
-                feed_dict[self.mmr_score] = batch.ssi_masks_padded      # [batch_size, max_dec_sents, 10]
-                if FLAGS.ssi_data_path == '':   # if we are using the groundtruth singletons and pairs, then we want to tell when to swtich sentences mask.
-                    feed_dict[self.batch_sent_indices] = batch.batch_sent_indices   # [batch_size, max_dec_steps, 2] the last dimension specifies which example out of the batch to pick from and which mask to pick from the ssi sentences mask
         return feed_dict
 # tf.boolean_mask
     def _add_encoder(self, encoder_inputs, seq_len):
@@ -166,10 +141,8 @@ class SummarizationModel(object):
         cell = tf.contrib.rnn.LSTMCell(hps.hidden_dim, state_is_tuple=True, initializer=self.rand_unif_init)
 
         prev_coverage = self.prev_coverage if hps.mode=="decode" and hps.coverage else None # In decode mode, we run attention_decoder one step at a time and so need to pass in the previous step's coverage vector each time
-        mmr_score =  self.mmr_score if FLAGS.pg_mmr else None
-        batch_sent_indices = self.batch_sent_indices if FLAGS.pg_mmr and hps.mode!="decode" else None
 
-        outputs, out_state, attn_dists, p_gens, coverage, pre_attn_dists = attention_decoder(inputs, self._dec_in_state, self._enc_states, self._enc_padding_mask, cell, initial_state_attention=(hps.mode=="decode"), pointer_gen=hps.pointer_gen, use_coverage=hps.coverage, prev_coverage=prev_coverage, mmr_masks=mmr_score, batch_sent_indices=batch_sent_indices)
+        outputs, out_state, attn_dists, p_gens, coverage, pre_attn_dists = attention_decoder(inputs, self._dec_in_state, self._enc_states, self._enc_padding_mask, cell, initial_state_attention=(hps.mode=="decode"), pointer_gen=hps.pointer_gen, use_coverage=hps.coverage, prev_coverage=prev_coverage)
 
         return outputs, out_state, attn_dists, p_gens, coverage, pre_attn_dists
 
@@ -250,11 +223,6 @@ class SummarizationModel(object):
                 # if hps.mode=="train": self._add_emb_vis(embedding) # add to tensorboard
                 emb_enc_inputs = tf.nn.embedding_lookup(embedding, self._enc_batch) # tensor with shape (batch_size, max_enc_steps, emb_size)
                 emb_dec_inputs = [tf.nn.embedding_lookup(embedding, x) for x in tf.unstack(self._dec_batch, axis=1)] # list length max_dec_steps containing shape (batch_size, emb_size)
-                if FLAGS.tag_tokens:
-                    imp_emb_matrix = tf.get_variable('imp_embedding', [2, hps.emb_dim], dtype=tf.float32, initializer=self.trunc_norm_init)
-                    emb_importances = tf.nn.embedding_lookup(imp_emb_matrix, self.importance_masks) # tensor with shape (batch_size, max_enc_steps, emb_size)
-                    emb_enc_inputs = emb_enc_inputs + emb_importances   # Add token embeddings and importance embeddings (which represent 0/1 for whether the word should be included in the summary). Can be changed to concatenation rather than addition.
-
             if hps.mode == "decode" and hps.coverage:
                 # Add embedder
                 self.token_embeddings = tf.nn.embedding_lookup(embedding, self.token_inputs)
@@ -323,13 +291,6 @@ class SummarizationModel(object):
                         self._total_loss = self._loss + hps.cov_loss_wt * self._coverage_loss
                         tf.summary.scalar('total_loss', self._total_loss)
 
-                        if hps.word_imp_reg:
-                            with tf.variable_scope('importance_loss'):
-                                self._importance_loss = _importance_loss(self.attn_dists, self._enc_padding_mask, self.enc_importances)
-                                tf.summary.scalar('importance_loss', self._importance_loss)
-                            self._total_with_imp_loss = self._total_loss + hps.imp_loss_wt * self._importance_loss
-                            tf.summary.scalar('total_with_imp_loss', self._total_with_imp_loss)
-
 
         if hps.mode == "decode":
             # We run decode beam search mode one decoder step at a time
@@ -343,10 +304,7 @@ class SummarizationModel(object):
         """Sets self._train_op, the op to run for training."""
         # Take gradients of the trainable variables w.r.t. the loss function to minimize
         if self._hps.coverage:
-            if self._hps.word_imp_reg:
-                loss_to_minimize = self._total_with_imp_loss
-            else:
-                loss_to_minimize = self._total_loss
+            loss_to_minimize = self._total_loss
         else:
             loss_to_minimize = self._loss
         # loss_to_minimize = self._total_loss if self._hps.coverage else self._loss
@@ -393,8 +351,6 @@ class SummarizationModel(object):
         }
         if self._hps.coverage:
             to_return['coverage_loss'] = self._coverage_loss
-        if self._hps.word_imp_reg:
-            to_return['importance_loss'] = self._importance_loss
         try:
             result = sess.run(to_return, feed_dict)
         except:
@@ -439,7 +395,7 @@ class SummarizationModel(object):
         embs = sess.run(to_return, feed_dict=feed_dict)
         return embs
 
-    def decode_onestep(self, sess, batch, latest_tokens, enc_states, dec_init_states, prev_coverage, mmr_score):
+    def decode_onestep(self, sess, batch, latest_tokens, enc_states, dec_init_states, prev_coverage):
         """For beam search decoding. Run the decoder for one step.
 
         Args:
@@ -492,14 +448,6 @@ class SummarizationModel(object):
         if self._hps.coverage:
             feed[self.prev_coverage] = np.stack(prev_coverage, axis=0)
             to_return['coverage'] = self.coverage
-
-        if FLAGS.pg_mmr:
-            if FLAGS.ssi_data_path != '':       # if we are doing pg_mmr with bert
-                # feed_dict[self.mmr_score] = batch.ssi_masks_per_timestep
-                feed[self.mmr_score] = mmr_score      # [batch_size, max_dec_sents, max_enc_len]
-            else:
-                feed[self.mmr_score] = mmr_score
-                # to_return['p_gens'] = self.p_gens
 
         results = sess.run(to_return, feed_dict=feed) # run the decoder step
 

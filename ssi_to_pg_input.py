@@ -74,7 +74,6 @@ flags.DEFINE_boolean('restore_best_model', False, 'Restore the best model in the
 flags.DEFINE_boolean('debug', False, "Run in tensorflow's debug mode (watches for NaN/inf values)")
 
 # PG-MMR settings
-flags.DEFINE_boolean('pg_mmr', False, 'If true, use the PG-MMR model.')
 flags.DEFINE_string('importance_fn', 'tfidf', 'Which model to use for calculating importance. Must be one of {svr, tfidf, oracle}.')
 flags.DEFINE_float('lambda_val', 0.6, 'Lambda factor to reduce similarity amount to subtract from importance. Set to 0.5 to make importance and similarity have equal weight.')
 flags.DEFINE_integer('mute_k', 7, 'Pick top k sentences to select and mute all others. Set to -1 to turn off.')
@@ -86,7 +85,7 @@ flags.DEFINE_boolean('plot_distributions', False, 'If true, save plots of each d
 
 flags.DEFINE_boolean('attn_vis', False, 'If true, then output attention visualization during decoding.')
 
-flags.DEFINE_string('singles_and_pairs', 'singles',
+flags.DEFINE_string('singles_and_pairs', 'both',
                     'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
 # flags.DEFINE_string('ssi_exp_name', 'lambdamart_singles',
 #                     'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
@@ -108,10 +107,7 @@ flags.DEFINE_string('ssi_data_path', '',
                     'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
 flags.DEFINE_boolean('better_beam_search', False,
                     'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
-flags.DEFINE_boolean('word_imp_reg', False, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
-flags.DEFINE_float('imp_loss_wt', 1.0, 'Weight of coverage loss (lambda in the paper). If zero, then no incentive to minimize coverage loss.')
 flags.DEFINE_boolean('first_intact', False, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
-flags.DEFINE_boolean('tag_tokens', False, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
 flags.DEFINE_boolean('by_instance', False, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
 
 
@@ -153,9 +149,6 @@ def main(unused_argv):
         FLAGS.exp_name = FLAGS.dataset_name + '_' + FLAGS.exp_name + extractor + '_singles'
         FLAGS.pretrained_path = os.path.join(FLAGS.log_root, pretrained_dataset + '_singles')
         dataset_articles = FLAGS.dataset_name + '_singles'
-    if FLAGS.word_imp_reg:
-        FLAGS.pretrained_path += '_imp' + str(FLAGS.imp_loss_wt)
-        FLAGS.exp_name += '_imp' + str(FLAGS.imp_loss_wt)
 
 
     bert_suffix = ''
@@ -196,8 +189,7 @@ def main(unused_argv):
     if FLAGS.dataset_name != "":
         FLAGS.data_path = os.path.join(FLAGS.data_root, FLAGS.dataset_name, FLAGS.dataset_split + '*')
     if not os.path.exists(os.path.join(FLAGS.data_root, FLAGS.dataset_name)) or len(os.listdir(os.path.join(FLAGS.data_root, FLAGS.dataset_name))) == 0:
-        print(('No TF example data found at %s so creating it from raw data.' % os.path.join(FLAGS.data_root, FLAGS.dataset_name)))
-        convert_data.process_dataset(FLAGS.dataset_name)
+        raise Exception('No TF example data found at %s.' % os.path.join(FLAGS.data_root, FLAGS.dataset_name))
 
     logging.set_verbosity(logging.INFO) # choose what level of logging you want
     logging.info('Starting seq2seq_attention in %s mode...', (FLAGS.mode))
@@ -234,10 +226,6 @@ def main(unused_argv):
         raise Exception("The single_pass flag should only be True in decode mode")
 
     # Make a namedtuple hps, containing the values of the hyperparameters that the model needs
-    # hparam_list = ['mode', 'lr', 'adagrad_init_acc', 'rand_unif_init_mag', 'trunc_norm_init_std',
-    #                'max_grad_norm', 'hidden_dim', 'emb_dim', 'batch_size', 'max_dec_steps',
-    #                'max_enc_steps', 'coverage', 'cov_loss_wt', 'pointer_gen', 'lambdamart_input', 'pg_mmr', 'singles_and_pairs', 'skip_with_less_than_3',
-    #                'ssi_data_path', 'word_imp_reg', 'imp_loss_wt']
     hparam_list = [item for item in list(FLAGS.flag_values_dict().keys()) if item != '?']
     hps_dict = {}
     for key,val in FLAGS.__flags.items(): # for each flag

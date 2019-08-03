@@ -51,7 +51,7 @@ original_pretrained_path = {'cnn_dm': 'logs/pretrained_model_tf1.2.1',
                             }
 
 # Where to find data
-flags.DEFINE_string('dataset_name', 'example_custom_dataset', 'Which dataset to use. Makes a log dir based on name.\
+flags.DEFINE_string('dataset_name', 'cnn_dm', 'Which dataset to use. Makes a log dir based on name.\
                                                 Must be one of {tac_2011, tac_2008, duc_2004, duc_tac, cnn_dm} or a custom dataset name')
 flags.DEFINE_string('data_root', os.path.expanduser('~') + '/data/tf_data/with_coref_and_ssi', 'Path to root directory for all datasets (already converted to TensorFlow examples).')
 flags.DEFINE_string('vocab_path', 'logs/vocab', 'Path expression to text vocabulary file.')
@@ -100,7 +100,6 @@ flags.DEFINE_boolean('restore_best_model', False, 'Restore the best model in the
 flags.DEFINE_boolean('debug', False, "Run in tensorflow's debug mode (watches for NaN/inf values)")
 
 # PG-MMR settings
-flags.DEFINE_boolean('pg_mmr', False, 'If true, use the PG-MMR model.')
 flags.DEFINE_string('importance_fn', 'tfidf', 'Which model to use for calculating importance. Must be one of {svr, tfidf, oracle}.')
 flags.DEFINE_float('lambda_val', 0.6, 'Lambda factor to reduce similarity amount to subtract from importance. Set to 0.5 to make importance and similarity have equal weight.')
 flags.DEFINE_integer('mute_k', 7, 'Pick top k sentences to select and mute all others. Set to -1 to turn off.')
@@ -113,8 +112,8 @@ flags.DEFINE_integer('num_iterations', 60000, 'How many iterations to run. Set t
 
 flags.DEFINE_boolean('attn_vis', False, 'If true, then output attention visualization during decoding.')
 flags.DEFINE_boolean('lambdamart_input', True, 'If true, then do postprocessing to combine sentences from the same example.')
-flags.DEFINE_string('singles_and_pairs', 'none',
-                    'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both, none}.')
+flags.DEFINE_string('singles_and_pairs', 'both',
+                    'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
 flags.DEFINE_string('original_dataset_name', '',
                     'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
 flags.DEFINE_boolean('skip_with_less_than_3', True,
@@ -123,12 +122,7 @@ flags.DEFINE_boolean('use_bert', True, 'If true, use PG trained on Websplit for 
 flags.DEFINE_boolean('upper_bound', False, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
 flags.DEFINE_string('ssi_data_path', '',
                     'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
-flags.DEFINE_boolean('notrain', False, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
-flags.DEFINE_boolean('finetune', False, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
 # flags.DEFINE_boolean('l_sents', True, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
-flags.DEFINE_boolean('word_imp_reg', False, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
-flags.DEFINE_boolean('convert_to_importance_model', False, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
-flags.DEFINE_float('imp_loss_wt', 1.0, 'Weight of coverage loss (lambda in the paper). If zero, then no incentive to minimize coverage loss.')
 flags.DEFINE_boolean('tag_tokens', False, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
 flags.DEFINE_boolean('by_instance', False, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
 
@@ -142,8 +136,6 @@ flags.DEFINE_bool("artemb", True, "Whether to use TPU or GPU/CPU.")
 
 flags.DEFINE_bool("plushidden", True, "Whether to use TPU or GPU/CPU.")
 
-
-kaiqiang_dataset_names = ['gigaword', 'cnndm_1to1', 'newsroom', 'websplit']
 
 def calc_running_avg_loss(loss, running_avg_loss, summary_writer, step, decay=0.99):
     """Calculate the running average loss via exponential decay.
@@ -220,30 +212,9 @@ def convert_to_coverage_model():
     print("saved.")
     exit()
 
-def convert_to_importance_model():
-    """Load non-coverage checkpoint, add initialized extra variables for coverage, and save as new checkpoint"""
-    logging.info("converting non-importance model to importance model..")
-
-    new_log_root = FLAGS.log_root + '_imp' + str(FLAGS.imp_loss_wt)
-
-    print("copying models from %s to %s..." % (FLAGS.log_root, new_log_root))
-    util.create_dirs(new_log_root)
-    copy_tree(FLAGS.log_root, new_log_root)
-    print("copied.")
-    # exit()
-
 def setup_training(model, batcher):
     """Does setup before starting training (run_training)"""
     train_dir = os.path.join(FLAGS.log_root, "train")
-    if FLAGS.finetune:
-        if not os.path.exists(train_dir):
-            print (util.bcolors.OKGREEN + 'Copying See et al. pre-trained model (%s) to (%s) to be fine-tuned' % (os.path.join(FLAGS.pretrained_path, 'train'), train_dir) + util.bcolors.ENDC)
-            os.makedirs(train_dir)
-            files = glob.glob(os.path.join(os.path.join(FLAGS.pretrained_path, 'train'), "*model*"))
-            files.extend(glob.glob(os.path.join(os.path.join(FLAGS.pretrained_path, 'train'), "*checkpoint*")))
-            for file in files:
-                if os.path.isfile(file):
-                    shutil.copy2(file, train_dir)
     if not os.path.exists(train_dir): os.makedirs(train_dir)
 
     model.build_graph() # build the graph
@@ -309,10 +280,6 @@ def run_training_iteration(model, batcher, summary_writer, sess):
     if FLAGS.coverage:
         coverage_loss = results['coverage_loss']
         tqdm.write("coverage_loss: %f" % coverage_loss) # print the coverage loss to screen
-
-    if FLAGS.word_imp_reg:
-        importance_loss = results['importance_loss']
-        tqdm.write("importance_loss: %f" % importance_loss)  # print the coverage loss to screen
 
     # get the summaries and iteration number so we can write summaries to tensorboard
     summaries = results['summaries'] # we will write these summaries to tensorboard using summary_writer
@@ -406,15 +373,10 @@ log_dir = 'logs'
 def main(unused_argv):
     if len(unused_argv) != 1: # prints a message if you've entered flags incorrectly
         raise Exception("Problem with flags: %s" % unused_argv)
-    if FLAGS.pg_mmr:
-        FLAGS.data_root = os.path.expanduser('~') + '/data/tf_data/with_coref_and_ssi'
     if FLAGS.dataset_name != "":
         FLAGS.data_path = os.path.join(FLAGS.data_root, FLAGS.dataset_name, FLAGS.dataset_split + '*')
-    if FLAGS.dataset_name in kaiqiang_dataset_names:
-        FLAGS.skip_with_less_than_3 = False
     if not os.path.exists(os.path.join(FLAGS.data_root, FLAGS.dataset_name)) or len(os.listdir(os.path.join(FLAGS.data_root, FLAGS.dataset_name))) == 0:
-        print(('No TF example data found at %s so creating it from raw data.' % os.path.join(FLAGS.data_root, FLAGS.dataset_name)))
-        convert_data.process_dataset(FLAGS.dataset_name)
+        raise Exception('No TF example data found at %s.' % os.path.join(FLAGS.data_root, FLAGS.dataset_name))
 
     if FLAGS.mode == 'decode':
         extractor = '_bert' if FLAGS.use_bert else '_lambdamart'
@@ -425,8 +387,6 @@ def main(unused_argv):
     pretrained_dataset = FLAGS.dataset_name
     if FLAGS.dataset_name == 'duc_2004':
         pretrained_dataset = 'cnn_dm'
-    if FLAGS.pg_mmr:
-        FLAGS.exp_name += '_pgmmr'
     if FLAGS.singles_and_pairs == 'both':
         FLAGS.exp_name = FLAGS.exp_name + extractor + '_both'
         if FLAGS.mode == 'decode':
@@ -437,14 +397,6 @@ def main(unused_argv):
         if FLAGS.mode == 'decode':
             FLAGS.pretrained_path = os.path.join(FLAGS.log_root, pretrained_dataset + '_pgmmr_singles')
         dataset_articles = FLAGS.dataset_name + '_singles'
-
-    if FLAGS.notrain:
-        FLAGS.exp_name += '_notrain'
-        FLAGS.pretrained_path = original_pretrained_path[FLAGS.dataset_name]
-    if FLAGS.finetune:
-        FLAGS.exp_name += '_finetune'
-        if FLAGS.mode == 'decode':
-            FLAGS.pretrained_path += '_finetune'
 
     extractor = 'bert' if FLAGS.use_bert else 'lambdamart'
     bert_suffix = ''
@@ -478,15 +430,6 @@ def main(unused_argv):
     FLAGS.actual_log_root = FLAGS.log_root
     FLAGS.log_root = os.path.join(FLAGS.log_root, FLAGS.exp_name)
 
-    if FLAGS.convert_to_importance_model:
-        convert_to_importance_model()
-        FLAGS.convert_to_coverage_model = True
-    if FLAGS.word_imp_reg:
-        assert FLAGS.coverage, "To run with importance_loss, run with coverage=True as well"
-        FLAGS.log_root += '_imp' + str(FLAGS.imp_loss_wt)
-    if FLAGS.tag_tokens:
-        FLAGS.log_root += '_tag'
-
     print(util.bcolors.OKGREEN + "Experiment path: " + FLAGS.log_root + util.bcolors.ENDC)
 
     if FLAGS.dataset_name == 'duc_2004':
@@ -514,10 +457,6 @@ def main(unused_argv):
         raise Exception("The single_pass flag should only be True in decode mode")
 
     # Make a namedtuple hps, containing the values of the hyperparameters that the model needs
-    # hparam_list = ['mode', 'lr', 'adagrad_init_acc', 'rand_unif_init_mag', 'trunc_norm_init_std',
-    #                'max_grad_norm', 'hidden_dim', 'emb_dim', 'batch_size', 'max_dec_steps',
-    #                'max_enc_steps', 'coverage', 'cov_loss_wt', 'pointer_gen', 'lambdamart_input', 'pg_mmr', 'singles_and_pairs', 'skip_with_less_than_3', 'ssi_data_path',
-    #                'dataset_name', 'word_imp_reg', 'imp_loss_wt', 'tag_tokens']
     hparam_list = [item for item in list(FLAGS.flag_values_dict().keys()) if item != '?']
     hps_dict = {}
     for key,val in FLAGS.__flags.items(): # for each flag
@@ -525,47 +464,12 @@ def main(unused_argv):
             hps_dict[key] = val.value # add it to the dict
     hps = namedtuple("HParams", list(hps_dict.keys()))(**hps_dict)
 
-    if FLAGS.pg_mmr:
-
-        # Fit the TFIDF vectorizer if not already fitted
-        if FLAGS.importance_fn == 'tfidf':
-            tfidf_model_path = os.path.join(FLAGS.actual_log_root, 'tfidf_vectorizer', FLAGS.original_dataset_name + '.dill')
-            if not os.path.exists(tfidf_model_path):
-                print(('No TFIDF vectorizer model file found at %s, so fitting the model now.' % tfidf_model_path))
-                tfidf_vectorizer = fit_tfidf_vectorizer(hps, vocab)
-                with open(tfidf_model_path, 'wb') as f:
-                    dill.dump(tfidf_vectorizer, f)
-
-        # Train the SVR model on the CNN validation set if not already trained
-        if FLAGS.importance_fn == 'svr':
-            save_path = os.path.join(FLAGS.data_root, 'svr_training_data')
-            importance_model_path = os.path.join(FLAGS.actual_log_root, 'svr.pickle')
-            dataset_split = 'val'
-            if not os.path.exists(importance_model_path):
-                if not os.path.exists(save_path) or len(os.listdir(save_path)) == 0:
-                    print(('No importance_feature instances found at %s so creating it from raw data.' % save_path))
-                    decode_model_hps = hps._replace(
-                        max_dec_steps=1, batch_size=100, mode='calc_features')  # The model is configured with max_dec_steps=1 because we only ever run one step of the decoder at a time (to do beam search). Note that the batcher is initialized with max_dec_steps equal to e.g. 100 because the batches need to contain the full summaries
-                    cnn_dm_train_data_path = os.path.join(FLAGS.data_root, 'cnn_500_dm_500', dataset_split + '*')
-                    batcher = Batcher(cnn_dm_train_data_path, vocab, decode_model_hps, single_pass=FLAGS.single_pass, cnn_500_dm_500=True)
-                    calc_features(cnn_dm_train_data_path, decode_model_hps, vocab, batcher, save_path)
-
-                print(('No importance_feature SVR model found at %s so training it now.' % importance_model_path))
-                features_list = importance_features.get_features_list(True)
-                sent_reps = importance_features.load_data(os.path.join(save_path, dataset_split + '*'), -1)
-                print('Loaded %d sentences representations' % len(sent_reps))
-                x_y = importance_features.features_to_array(sent_reps, features_list)
-                train_x, train_y = x_y[:,:-1], x_y[:,-1]
-                svr_model = importance_features.run_training(train_x, train_y)
-                with open(importance_model_path, 'wb') as f:
-                    pickle.dump(svr_model, f)
-
     # Create a batcher object that will create minibatches of data
     batcher = Batcher(FLAGS.data_path, vocab, hps, single_pass=FLAGS.single_pass)
 
     tf.set_random_seed(113) # a seed value for randomness
 
-    # Start decoding on multi-document inputs
+    # Start decoding
     if hps.mode == 'train':
         print("creating model...")
         model = SummarizationModel(hps, vocab)
@@ -578,8 +482,6 @@ def main(unused_argv):
         model = SummarizationModel(decode_model_hps, vocab)
         decoder = BeamSearchDecoder(model, batcher, vocab)
         decoder.decode() # decode indefinitely (unless single_pass=True, in which case deocde the dataset exactly once)
-        # while True:
-        #     a=0
     else:
         raise ValueError("The 'mode' flag must be one of train/eval/decode")
 

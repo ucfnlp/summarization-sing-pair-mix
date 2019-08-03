@@ -149,7 +149,7 @@ flags.DEFINE_string(
     "The output directory where the model checkpoints will be written.")
 
 if 'singles_and_pairs' not in flags.FLAGS:
-    flags.DEFINE_string('singles_and_pairs', 'singles', 'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
+    flags.DEFINE_string('singles_and_pairs', 'both', 'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
 if 'dataset_name' not in flags.FLAGS:
     flags.DEFINE_string('dataset_name', 'cnn_dm', 'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
 
@@ -310,181 +310,6 @@ class MergeProcessor(DataProcessor):
           article_embedding = [0.]
 
       yield InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label, sentence_ids=sentence_ids, article_embedding=article_embedding)
-
-    #   examples.append(
-    #       InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label, sentence_ids=sentence_ids, article_embedding=article_embedding))
-    # return examples
-
-
-
-class XnliProcessor(DataProcessor):
-  """Processor for the XNLI data set."""
-
-  def __init__(self):
-    self.language = "zh"
-
-  def get_train_examples(self, data_dir):
-    """See base class."""
-    lines = self._read_tsv(
-        os.path.join(data_dir, "multinli",
-                     "multinli.train.%s.tsv" % self.language))
-    examples = []
-    for (i, line) in enumerate(lines):
-      if i == 0:
-        continue
-      guid = "train-%d" % (i)
-      text_a = tokenization.convert_to_unicode(line[0])
-      text_b = tokenization.convert_to_unicode(line[1])
-      label = tokenization.convert_to_unicode(line[2])
-      if label == tokenization.convert_to_unicode("contradictory"):
-        label = tokenization.convert_to_unicode("contradiction")
-      examples.append(
-          InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
-    return examples
-
-  def get_dev_examples(self, data_dir):
-    """See base class."""
-    lines = self._read_tsv(os.path.join(data_dir, "xnli.dev.tsv"))
-    examples = []
-    for (i, line) in enumerate(lines):
-      if i == 0:
-        continue
-      guid = "dev-%d" % (i)
-      language = tokenization.convert_to_unicode(line[0])
-      if language != tokenization.convert_to_unicode(self.language):
-        continue
-      text_a = tokenization.convert_to_unicode(line[6])
-      text_b = tokenization.convert_to_unicode(line[7])
-      label = tokenization.convert_to_unicode(line[1])
-      examples.append(
-          InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
-    return examples
-
-  def get_labels(self):
-    """See base class."""
-    return ["contradiction", "entailment", "neutral"]
-
-
-class MnliProcessor(DataProcessor):
-  """Processor for the MultiNLI data set (GLUE version)."""
-
-  def get_train_examples(self, data_dir):
-    """See base class."""
-    return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
-
-  def get_dev_examples(self, data_dir):
-    """See base class."""
-    return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "dev_matched.tsv")),
-        "dev_matched")
-
-  def get_test_examples(self, data_dir):
-    """See base class."""
-    return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "test_matched.tsv")), "test")
-
-  def get_labels(self):
-    """See base class."""
-    return ["contradiction", "entailment", "neutral"]
-
-  def _create_examples(self, lines, set_type):
-    """Creates examples for the training and dev sets."""
-    examples = []
-    for (i, line) in enumerate(lines):
-      if i == 0:
-        continue
-      guid = "%s-%s" % (set_type, tokenization.convert_to_unicode(line[0]))
-      text_a = tokenization.convert_to_unicode(line[8])
-      text_b = tokenization.convert_to_unicode(line[9])
-      if set_type == "test":
-        label = "contradiction"
-      else:
-        label = tokenization.convert_to_unicode(line[-1])
-      examples.append(
-          InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
-    return examples
-
-
-class MrpcProcessor(DataProcessor):
-  """Processor for the MRPC data set (GLUE version)."""
-
-  def get_train_examples(self, data_dir):
-    """See base class."""
-    return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
-
-  def get_dev_examples(self, data_dir):
-    """See base class."""
-    return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
-
-  def get_test_examples(self, data_dir):
-    """See base class."""
-    return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
-
-  def get_labels(self):
-    """See base class."""
-    return ["0", "1"]
-
-  def _create_examples(self, lines, set_type):
-    """Creates examples for the training and dev sets."""
-    examples = []
-    for (i, line) in enumerate(lines):
-      if i == 0:
-        continue
-      guid = "%s-%s" % (set_type, i)
-      text_a = tokenization.convert_to_unicode(line[3])
-      text_b = tokenization.convert_to_unicode(line[4])
-      if set_type == "test":
-        label = "0"
-      else:
-        label = tokenization.convert_to_unicode(line[0])
-      examples.append(
-          InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
-    return examples
-
-
-class ColaProcessor(DataProcessor):
-  """Processor for the CoLA data set (GLUE version)."""
-
-  def get_train_examples(self, data_dir):
-    """See base class."""
-    return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
-
-  def get_dev_examples(self, data_dir):
-    """See base class."""
-    return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
-
-  def get_test_examples(self, data_dir):
-    """See base class."""
-    return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
-
-  def get_labels(self):
-    """See base class."""
-    return ["0", "1"]
-
-  def _create_examples(self, lines, set_type):
-    """Creates examples for the training and dev sets."""
-    examples = []
-    for (i, line) in enumerate(lines):
-      # Only the test set has a header
-      if set_type == "test" and i == 0:
-        continue
-      guid = "%s-%s" % (set_type, i)
-      if set_type == "test":
-        text_a = tokenization.convert_to_unicode(line[1])
-        label = "0"
-      else:
-        text_a = tokenization.convert_to_unicode(line[3])
-        label = tokenization.convert_to_unicode(line[1])
-      examples.append(
-          InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
-    return examples
 
 
 def convert_single_example(ex_index, example, label_list, max_seq_length,
@@ -730,6 +555,7 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
   # If you want to use the token-level output, use model.get_sequence_output()
   # instead.
 
+  # Add extra hidden layer right before output, which allows the article embedding and the singleton/pair to interact in a non-linear way
   if FLAGS.plushidden:
       pre_output_layer = model.get_pooled_output()
       if FLAGS.artemb:
@@ -877,10 +703,6 @@ def main(_):
   tf.logging.set_verbosity(tf.logging.INFO)
 
   processors = {
-      "cola": ColaProcessor,
-      "mnli": MnliProcessor,
-      "mrpc": MrpcProcessor,
-      "xnli": XnliProcessor,
       "merge": MergeProcessor,
   }
 
@@ -952,7 +774,6 @@ def main(_):
           num_shards=FLAGS.num_tpu_cores,
           per_host_input_for_training=is_per_host))
 
-  train_examples = None
   num_train_steps = None
   num_warmup_steps = None
   if FLAGS.do_train:
@@ -960,9 +781,6 @@ def main(_):
     num_train_examples = num_lines_in_file(os.path.join(FLAGS.data_dir, "train.tsv")) - 1
     num_train_steps = int(
         num_train_examples / FLAGS.train_batch_size * FLAGS.num_train_epochs)
-    # train_examples = processor.get_train_examples(FLAGS.data_dir)
-    # num_train_steps = int(
-    #     len(train_examples) / FLAGS.train_batch_size * FLAGS.num_train_epochs)
     num_warmup_steps = int(num_train_steps * FLAGS.warmup_proportion)
 
   model_fn = model_fn_builder(
@@ -989,6 +807,7 @@ def main(_):
       if not os.path.exists(dir):
           os.makedirs(dir)
 
+  # Add early stopping to BERT
   early_stopping = tf.contrib.estimator.stop_if_no_decrease_hook(
       estimator,
       metric_name='loss',
@@ -1045,6 +864,7 @@ def main(_):
         drop_remainder=eval_drop_remainder,
         num_examples=num_eval_examples_with_padding)
 
+    # Add module to save the best checkpoints found so far
     exporter = BestCheckpointCopier(
         name='best',  # directory within model directory to copy checkpoints to
         checkpoints_to_keep=10,  # number of checkpoints to keep
@@ -1070,11 +890,9 @@ def main(_):
         is_training_or_val=True,
         drop_remainder=True,
         num_examples=num_train_examples)
-    # estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
     tf.estimator.train_and_evaluate(
         estimator,
         train_spec=tf.estimator.TrainSpec(train_input_fn, hooks=[early_stopping]),
-        # eval_spec=tf.estimator.EvalSpec(eval_input_fn, throttle_secs=10)
         eval_spec=tf.estimator.EvalSpec(eval_input_fn, throttle_secs=10, exporters=exporter)
     )
 
@@ -1100,8 +918,6 @@ def main(_):
           num_difference = 0
       else:
           num_difference = FLAGS.eval_batch_size - (num_actual_predict_examples % FLAGS.eval_batch_size)
-      to_add = [PaddingInputExample() for _ in range(num_difference)]
-      eval_example_generator = itertools.chain(eval_example_generator, to_add)
       num_predict_examples_with_padding = num_actual_predict_examples + num_difference
     else:
       num_predict_examples_with_padding = num_actual_predict_examples

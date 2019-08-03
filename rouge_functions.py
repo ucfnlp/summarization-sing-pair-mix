@@ -149,9 +149,6 @@ def write_for_rouge(all_reference_sents, decoded_sents, ex_index, ref_dir, dec_d
         for idx, sent in enumerate(decoded_sents):
             f.write(sent + "\n")
 
-    # if log:
-    #     logging.info("Wrote example %i to file" % ex_index)
-
 def rouge_eval(ref_dir, dec_dir, l_param=100):
     """Evaluate the files in ref_dir and dec_dir with pyrouge, returning results_dict"""
     r = pyrouge.Rouge155()

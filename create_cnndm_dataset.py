@@ -12,8 +12,7 @@ END_TOKENS = ['.', '!', '?', '...', "'", "`", '"', dm_single_close_quote, dm_dou
 # We use these to separate the summary sentences in the .bin datafiles
 SENTENCE_START = '<s>'
 SENTENCE_END = '</s>'
-CHUNK_SIZE = 1000 # num examples per chunk, for the chunked data
-out_full_dir = os.path.join('data/cnn_dm_processed')
+out_dir = os.path.join('data/processed/cnn_dm')
 
 # all_train_urls = "data/cnn_dm_unprocessed/url_lists/all_train.txt"
 # all_val_urls = "data/cnn_dm_unprocessed/url_lists/all_val.txt"
@@ -59,7 +58,6 @@ def fix_missing_period(line):
   if "@highlight" in line: return line
   if line=="": return line
   if line[-1] in END_TOKENS: return line
-  # print line[-1]
   return line + " ."
 
 def move_from_quote_end_to_sent_end(tokens, cur_end_idx):
@@ -185,14 +183,14 @@ def remove_irrelevant(corefs):
                 del m[key]
     return corefs
 
-def write_to_bin(url_file, dataset_split):
+def write_to_files(url_file, dataset_split):
   """Reads the tokenized .story files corresponding to the urls listed in the url_file and writes them to a out_file."""
   print("Making bin file for URLs listed in %s..." % url_file)
   url_list = read_text_file(url_file)
   url_hashes = get_url_hashes(url_list)
   story_fnames = [s+".story" for s in url_hashes]
   num_stories = len(story_fnames)
-  out_split_dir = os.path.join(out_full_dir, dataset_split)
+  out_split_dir = os.path.join(out_dir, dataset_split)
   if not os.path.exists(out_split_dir):
       os.makedirs(out_split_dir)
 
@@ -233,12 +231,12 @@ def write_to_bin(url_file, dataset_split):
 
 
 def main():
-    if not os.path.exists(out_full_dir):
-        os.makedirs(out_full_dir)
+    if not os.path.exists(out_dir):
+        os.makedirs(out_dir)
 
-    write_to_bin(all_test_urls, 'test')
-    write_to_bin(all_val_urls, 'val')
-    write_to_bin(all_train_urls, 'train')
+    write_to_files(all_test_urls, 'test')
+    write_to_files(all_val_urls, 'val')
+    write_to_files(all_train_urls, 'train')
 
 
 if __name__ == '__main__':

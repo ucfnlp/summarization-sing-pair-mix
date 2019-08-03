@@ -29,7 +29,7 @@ FLAGS = flags.FLAGS
 # Note: this function is based on tf.contrib.legacy_seq2seq_attention_decoder, which is now outdated.
 # In the future, it would make more sense to write variants on the attention mechanism using the new seq2seq library for tensorflow 1.0: https://www.tensorflow.org/api_guides/python/contrib.seq2seq#Attention
 def attention_decoder(decoder_inputs, initial_state, encoder_states, enc_padding_mask, cell, initial_state_attention=False,
-                      pointer_gen=True, use_coverage=False, prev_coverage=None, mmr_masks=None, batch_sent_indices=None):
+                      pointer_gen=True, use_coverage=False, prev_coverage=None):
     """
     Args:
         decoder_inputs: A list of 2D Tensors [batch_size x input_size].
@@ -84,7 +84,7 @@ def attention_decoder(decoder_inputs, initial_state, encoder_states, enc_padding
             # reshape from (batch_size, attn_length) to (batch_size, attn_len, 1, 1)
             prev_coverage = tf.expand_dims(tf.expand_dims(prev_coverage,2),3)
 
-        def attention(decoder_state, mmr_mask, coverage=None):
+        def attention(decoder_state, coverage=None):
             """Calculate the context vector and attention distribution from the decoder state.
 
             Args:
@@ -108,13 +108,6 @@ def attention_decoder(decoder_inputs, initial_state, encoder_states, enc_padding
                     masked_sums = tf.reduce_sum(attn_dist, axis=1) # shape (batch_size)
                     return attn_dist / tf.reshape(masked_sums, [-1, 1]) # re-normalize
 
-                def apply_mmr_mask(pre_attn_dist, mmr_mask):
-                    # post_attn_dist = pre_attn_dist * mmr_mask
-                    post_attn_dist = pre_attn_dist * tf.to_float(mmr_mask)
-                    # post_attn_dist = tf.boolean_mask(pre_attn_dist, mmr_mask)
-                    post_attn_dist = post_attn_dist / tf.expand_dims(tf.reduce_sum(post_attn_dist, axis=1), axis=1)
-                    return post_attn_dist
-
                 if use_coverage and coverage is not None: # non-first step of coverage
                     # Multiply coverage vector by w_c to get coverage_features.
                     coverage_features = nn_ops.conv2d(coverage, w_c, [1, 1, 1, 1], "SAME") # c has shape (batch_size, attn_length, 1, attention_vec_size)
@@ -124,12 +117,7 @@ def attention_decoder(decoder_inputs, initial_state, encoder_states, enc_padding
 
                     # Calculate attention distribution
                     pre_attn_dist = masked_attention(e)
-
-                    # Added for PG-MMR: apply mmr_score to change distribution to reflect what has been covered already
-                    if mmr_mask is not None:
-                        attn_dist = apply_mmr_mask(pre_attn_dist, mmr_mask)
-                    else:
-                        attn_dist = pre_attn_dist
+                    attn_dist = pre_attn_dist
 
                     # Update coverage vector
                     coverage += array_ops.reshape(attn_dist, [batch_size, -1, 1, 1])
@@ -143,12 +131,7 @@ def attention_decoder(decoder_inputs, initial_state, encoder_states, enc_padding
                     if use_coverage: # first step of training
                         coverage = tf.expand_dims(tf.expand_dims(attn_dist,2),2) # initialize coverage
                     pre_attn_dist = attn_dist
-
-                    # Added for PG-MMR: apply mmr_score to change distribution to reflect what has been covered already
-                    if mmr_mask is not None:
-                        attn_dist = apply_mmr_mask(pre_attn_dist, mmr_mask)
-                    else:
-                        attn_dist = pre_attn_dist
+                    attn_dist = pre_attn_dist
 
                 # Calculate the context vector from attn_dist and encoder_states
                 context_vector = math_ops.reduce_sum(array_ops.reshape(attn_dist, [batch_size, -1, 1, 1]) * encoder_states, [1, 2]) # shape (batch_size, attn_size).
@@ -164,16 +147,11 @@ def attention_decoder(decoder_inputs, initial_state, encoder_states, enc_padding
         coverage = prev_coverage # initialize coverage to None or whatever was passed in
         context_vector = array_ops.zeros([batch_size, attn_size])
         context_vector.set_shape([None, attn_size])	# Ensure the second shape of attention vectors is set.
-        if mmr_masks is not None:
-            mmr_mask_list = tf.unstack(mmr_masks, axis=1)   # Convert tensor to list of tensors, one for each dec timestep
-            if not initial_state_attention:
-                batch_sent_indices_list = tf.unstack(batch_sent_indices, axis=1)
         if initial_state_attention: # true in decode mode
             # Re-calculate the context vector from the previous step so that we can pass it through a linear layer with this step's input to get a modified version of
             # the input
             a=0
-            mmr_mask = mmr_mask_list[0] if mmr_masks is not None else None  # This is the previous MMR mask, since we're recreating context_vector from previous time step
-            context_vector, _, coverage, pre_attn_dist = attention(initial_state, mmr_mask, coverage) # in decode mode, this is what updates the coverage vector
+            context_vector, _, coverage, pre_attn_dist = attention(initial_state, coverage) # in decode mode, this is what updates the coverage vector
         for i, inp in enumerate(decoder_inputs):
             tf.logging.info("Adding attention_decoder timestep %i of %i", i, len(decoder_inputs))
             if i > 0:
@@ -191,17 +169,10 @@ def attention_decoder(decoder_inputs, initial_state, encoder_states, enc_padding
             # Run the attention mechanism.
             if i == 0 and initial_state_attention:	# always true in decode mode
                 a=0
-                mmr_mask = mmr_mask_list[1] if mmr_masks is not None else None  # This is the current MMR mask
                 with variable_scope.variable_scope(variable_scope.get_variable_scope(), reuse=True): # you need this because you've already run the initial attention(...) call
-                    context_vector, attn_dist, _, pre_attn_dist = attention(state, mmr_mask, coverage) # don't allow coverage to update
+                    context_vector, attn_dist, _, pre_attn_dist = attention(state, coverage) # don't allow coverage to update
             else:
-                if mmr_masks is not None:
-                    batch_sent_idx = batch_sent_indices_list[i]  # scalar tensor
-                    mmr_mask = tf.gather_nd(mmr_masks, batch_sent_idx)
-                else:
-                    mmr_mask = None
-                # mmr_mask = mmr_mask_list[i] if mmr_masks is not None else None
-                context_vector, attn_dist, coverage, pre_attn_dist = attention(state, mmr_mask, coverage)
+                context_vector, attn_dist, coverage, pre_attn_dist = attention(state, coverage)
             attn_dists.append(attn_dist)
             pre_attn_dists.append(pre_attn_dist)
 

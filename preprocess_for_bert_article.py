@@ -30,7 +30,7 @@ FLAGS(sys.argv)
 # import convert_data
 # import preprocess_for_lambdamart_no_flags
 
-data_dir = os.path.expanduser('~') + '/data/tf_data/with_coref_and_ssi_and_tag_tokens'
+data_dir = os.path.expanduser('~') + '/data/tf_data/with_coref_and_ssi'
 ssi_dir = 'data/ssi'
 names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string'), ('corefs', 'json'), ('doc_indices', 'delimited_list')]
 min_matched_tokens = 1

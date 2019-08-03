@@ -12,6 +12,7 @@ import util
 from ssi_functions import html_highlight_sents_in_article, get_simple_source_indices_list
 import pickle
 import ssi_functions
+import multiprocessing as mp
 
 if 'dataset_name' in flags.FLAGS:
     flags_already_done = True
@@ -20,42 +21,33 @@ else:
 
 FLAGS = flags.FLAGS
 if 'singles_and_pairs' not in flags.FLAGS:
-    flags.DEFINE_string('singles_and_pairs', 'singles', 'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
+    flags.DEFINE_string('singles_and_pairs', 'both', 'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
 if 'dataset_name' not in flags.FLAGS:
-    flags.DEFINE_string('dataset_name', 'cnn_dm', 'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
+    flags.DEFINE_string('dataset_name', 'cnn_dm', '')
 if 'upper_bound' not in flags.FLAGS:
-    flags.DEFINE_boolean('upper_bound', False, 'Which mode to run in. Must be in {write_to_file, generate_summaries}.')
+    flags.DEFINE_boolean('upper_bound', False, 'If true, then uses the groundtruth singletons/pairs.')
 if 'num_instances' not in flags.FLAGS:
-    flags.DEFINE_integer('num_instances', -1, 'Which mode to run in. Must be in {write_to_file, generate_summaries}.')
-if 'sent_position_criteria' not in flags.FLAGS:
-    flags.DEFINE_boolean('sent_position_criteria', True, 'Which mode to run in. Must be in {write_to_file, generate_summaries}.')
+    flags.DEFINE_integer('num_instances', -1, 'Number of instances to run for before stopping. Use -1 to run on all instances.')
 if 'sentemb' not in flags.FLAGS:
-    flags.DEFINE_boolean('sentemb', True, 'Which mode to run in. Must be in {write_to_file, generate_summaries}.')
+    flags.DEFINE_boolean('sentemb', True, 'Adds sentence position embedding to every word in BERT.')
 if 'artemb' not in flags.FLAGS:
-    flags.DEFINE_boolean('artemb', True, 'Which mode to run in. Must be in {write_to_file, generate_summaries}.')
+    flags.DEFINE_boolean('artemb', True, 'Adds arrticle embedding that is used when giving a score to a given instance in BERT.')
 if 'plushidden' not in flags.FLAGS:
-    flags.DEFINE_boolean('plushidden', True, 'Which mode to run in. Must be in {write_to_file, generate_summaries}.')
+    flags.DEFINE_boolean('plushidden', True, 'Adds an extra hidden layer at the output layer of BERT.')
 # flags.DEFINE_boolean('l_sents', True, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
 
 if not flags_already_done:
     FLAGS(sys.argv)
 
 _exp_name = 'bert'
-tfidf_model = 'all'
 dataset_split = 'test'
-importance = True
 filter_sentences = True
-num_instances = -1
 random_seed = 123
 max_sent_len_feat = 20
 min_matched_tokens = 2
-# singles_and_pairs = 'singles'
-include_tfidf_vec = True
 
-data_dir = os.path.expanduser('~') + '/data/tf_data/with_coref_and_ssi_and_tag_tokens'
-# bert_in_dir = os.path.join('data', 'bert', FLAGS.dataset_name, FLAGS.singles_and_pairs, 'input')
+data_dir = os.path.expanduser('~') + '/data/tf_data/with_coref_and_ssi'
 bert_in_dir = os.path.join('data', 'bert', FLAGS.dataset_name, FLAGS.singles_and_pairs, 'input')
-# bert_scores_dir = os.path.join('data', 'bert', FLAGS.dataset_name, FLAGS.singles_and_pairs, 'output')
 bert_scores_dir = os.path.join('data', 'bert', FLAGS.dataset_name, FLAGS.singles_and_pairs, 'output')
 ssi_out_dir = 'data/temp/' + FLAGS.dataset_name + '/ssi'
 log_dir = 'logs'
@@ -78,24 +70,19 @@ if FLAGS.plushidden:
     exp_name += '_plushidden'
     bert_scores_dir += '_plushidden'
 
-# if FLAGS.sentemb:
-    # exp_name += '_sentemb'
-    # bert_scores_dir += '_sentemb'
-
 if FLAGS.upper_bound:
     exp_name = exp_name + '_upperbound'
-
 
 if FLAGS.singles_and_pairs == 'singles':
     sentence_limit = 1
 else:
     sentence_limit = 2
 
-# if FLAGS.dataset_name == 'xsum':
-#     l_param = 40
-# else:
-#     l_param = 100
-l_param = 100
+if FLAGS.dataset_name == 'xsum':
+    l_param = 40
+else:
+    l_param = 100
+# l_param = 100
 temp_in_path = os.path.join(bert_in_dir, 'test.tsv')
 temp_out_path = os.path.join(bert_scores_dir, 'test_results.tsv')
 util.create_dirs(bert_scores_dir)
@@ -108,7 +95,6 @@ util.create_dirs(ref_dir)
 util.create_dirs(html_dir)
 util.create_dirs(ssi_out_dir)
 
-# @profile
 def read_bert_scores(file_path):
     with open(file_path) as f:
         lines = f.readlines()
@@ -116,7 +102,6 @@ def read_bert_scores(file_path):
     data = np.array(data)
     return data
 
-# @profile
 def get_qid_source_indices(line):
     items = line.split('\t')
     qid = int(items[3])
@@ -128,7 +113,6 @@ def get_qid_source_indices(line):
 
     return qid, inst_id, source_indices
 
-# @profile
 def read_source_indices_from_bert_input(file_path):
     out_list = []
     with open(file_path) as f:
@@ -138,13 +122,11 @@ def read_source_indices_from_bert_input(file_path):
         out_list.append(tuple((qid, tuple(source_indices))))
     return out_list
 
-# @profile
 def get_sent_or_sents(article_sent_tokens, source_indices):
     chosen_sent_tokens = [article_sent_tokens[idx] for idx in source_indices]
     # sents = util.flatten_list_of_lists(chosen_sent_tokens)
     return chosen_sent_tokens
 
-# @profile
 def get_bert_scores_for_singles_pairs(data, qid_source_indices_list):
     out_dict = {}
     for row_idx, row in enumerate(data):
@@ -155,7 +137,6 @@ def get_bert_scores_for_singles_pairs(data, qid_source_indices_list):
         out_dict[qid][source_indices] = score1
     return out_dict
 
-# @profile
 def rank_source_sents(temp_in_path, temp_out_path):
     qid_source_indices_list = read_source_indices_from_bert_input(temp_in_path)
     data = read_bert_scores(temp_out_path)
@@ -164,7 +145,6 @@ def rank_source_sents(temp_in_path, temp_out_path):
     source_indices_to_scores = get_bert_scores_for_singles_pairs(data, qid_source_indices_list)
     return source_indices_to_scores
 
-# @profile
 def get_best_source_sents(article_sent_tokens, mmr_dict, already_used_source_indices):
     if len(already_used_source_indices) == 0:
         source_indices = max(mmr_dict, key=mmr_dict.get)
@@ -188,12 +168,11 @@ def generate_summary(article_sent_tokens, qid_ssi_to_importances, example_idx):
     similar_source_indices_list = []
     summary_sents_for_html = []
     ssi_length_extractive = None
+
+    # Iteratively select a singleton/pair from the article that has the highest score from BERT
     while len(summary_tokens) < 300:
         if len(summary_tokens) >= l_param and ssi_length_extractive is None:
             ssi_length_extractive = len(similar_source_indices_list)
-        # if FLAGS.dataset_name == 'xsum' and len(summary_tokens) > 0:
-        #     ssi_length_extractive = len(similar_source_indices_list)
-        #     break
         mmr_dict = util.calc_MMR_source_indices(article_sent_tokens, summary_tokens, None, qid_ssi_to_importances, qid=qid)
         sents, source_indices = get_best_source_sents(article_sent_tokens, mmr_dict, already_used_source_indices)
         if len(source_indices) == 0:
@@ -208,13 +187,11 @@ def generate_summary(article_sent_tokens, qid_ssi_to_importances, example_idx):
         ssi_length_extractive = len(similar_source_indices_list)
     selected_article_sent_indices = util.flatten_list_of_lists(similar_source_indices_list[:ssi_length_extractive])
     summary_sents = [' '.join(sent) for sent in util.reorder(article_sent_tokens, selected_article_sent_indices)]
-    # summary = '\n'.join([' '.join(tokens) for tokens in summary_sent_tokens])
     return summary_sents, similar_source_indices_list, summary_sents_for_html, ssi_length_extractive
 
 def example_generator_extended(example_generator, total, single_feat_len, pair_feat_len, singles_and_pairs):
     example_idx = -1
     for example in tqdm(example_generator, total=total):
-    # for example in example_generator:
         example_idx += 1
         if FLAGS.num_instances != -1 and example_idx >= FLAGS.num_instances:
             break
@@ -223,22 +200,23 @@ def example_generator_extended(example_generator, total, single_feat_len, pair_f
 def evaluate_example(ex):
     example, example_idx, qid_ssi_to_importances, _, _ = ex
     print(example_idx)
-    # example_idx += 1
-    qid = example_idx
+
+    # Read example from dataset
     raw_article_sents, groundtruth_similar_source_indices_list, groundtruth_summary_text, corefs, doc_indices = util.unpack_tf_example(example, names_to_types)
     article_sent_tokens = [util.process_sent(sent) for sent in raw_article_sents]
     enforced_groundtruth_ssi_list = util.enforce_sentence_limit(groundtruth_similar_source_indices_list, sentence_limit)
-    groundtruth_summ_sent_tokens = []
     groundtruth_summ_sents = [[sent.strip() for sent in groundtruth_summary_text.strip().split('\n')]]
     groundtruth_summ_sent_tokens = [sent.split(' ') for sent in groundtruth_summ_sents[0]]
 
     if FLAGS.upper_bound:
+        # If upper bound, then get the groundtruth singletons/pairs
         replaced_ssi_list = util.replace_empty_ssis(enforced_groundtruth_ssi_list, raw_article_sents)
         selected_article_sent_indices = util.flatten_list_of_lists(replaced_ssi_list)
         summary_sents = [' '.join(sent) for sent in util.reorder(article_sent_tokens, selected_article_sent_indices)]
         similar_source_indices_list = groundtruth_similar_source_indices_list
         ssi_length_extractive = len(similar_source_indices_list)
     else:
+        # Generates summary based on BERT output. This is an extractive summary.
         summary_sents, similar_source_indices_list, summary_sents_for_html, ssi_length_extractive = generate_summary(article_sent_tokens, qid_ssi_to_importances, example_idx)
         similar_source_indices_list_trunc = similar_source_indices_list[:ssi_length_extractive]
         summary_sents_for_html_trunc = summary_sents_for_html[:ssi_length_extractive]
@@ -246,7 +224,6 @@ def evaluate_example(ex):
             summary_sent_tokens = [sent.split(' ') for sent in summary_sents_for_html_trunc]
             extracted_sents_in_article_html = html_highlight_sents_in_article(summary_sent_tokens, similar_source_indices_list_trunc,
                                             article_sent_tokens, doc_indices=doc_indices)
-            # write_highlighted_html(extracted_sents_in_article_html, html_dir, example_idx)
 
             groundtruth_ssi_list, lcs_paths_list, article_lcs_paths_list = get_simple_source_indices_list(
                                             groundtruth_summ_sent_tokens,
@@ -255,14 +232,12 @@ def evaluate_example(ex):
                                             article_sent_tokens, lcs_paths_list=lcs_paths_list, article_lcs_paths_list=article_lcs_paths_list, doc_indices=doc_indices)
 
             all_html = '<u>System Summary</u><br><br>' + extracted_sents_in_article_html + '<u>Groundtruth Summary</u><br><br>' + groundtruth_highlighted_html
-            # all_html = '<u>System Summary</u><br><br>' + extracted_sents_in_article_html
             ssi_functions.write_highlighted_html(all_html, html_dir, example_idx)
     rouge_functions.write_for_rouge(groundtruth_summ_sents, summary_sents, example_idx, ref_dir, dec_dir)
     return (groundtruth_similar_source_indices_list, similar_source_indices_list, ssi_length_extractive)
 
 
 def main(unused_argv):
-# def main(unused_argv):
 
     if len(unused_argv) != 1: # prints a message if you've entered flags incorrectly
         raise Exception("Problem with flags: %s" % unused_argv)
@@ -272,19 +247,25 @@ def main(unused_argv):
     np.random.seed(random_seed)
     source_dir = os.path.join(data_dir, dataset_articles)
     source_files = sorted(glob.glob(source_dir + '/' + dataset_split + '*'))
-    ex_sents = ['single .', 'sentence .']
-    article_text = ' '.join(ex_sents)
 
 
     total = len(source_files)*1000
     example_generator = data.example_generator(source_dir + '/' + dataset_split + '*', True, False, should_check_valid=False)
 
-
+    # Read output of BERT and put into a dictionary with:
+    # key=(article idx, source indices {this is a tuple of length 1 or 2, depending on if it is a singleton or pair})
+    # value=score
     qid_ssi_to_importances = rank_source_sents(temp_in_path, temp_out_path)
     ex_gen = example_generator_extended(example_generator, total, qid_ssi_to_importances, None, FLAGS.singles_and_pairs)
     print('Creating list')
     ex_list = [ex for ex in ex_gen]
-    ssi_list = list(map(evaluate_example, ex_list))
+
+    # Main function to get results on all test examples
+    pool = mp.Pool(mp.cpu_count())
+    ssi_list = pool.map(evaluate_example, ex_list)
+    pool.close()
+
+    # ssi_list = list(map(evaluate_example, ex_list))
 
     # save ssi_list
     with open(os.path.join(my_log_dir, 'ssi.pkl'), 'wb') as f:
@@ -293,18 +274,12 @@ def main(unused_argv):
         ssi_list = pickle.load(f)
     print('Evaluating BERT model F1 score...')
     suffix = util.all_sent_selection_eval(ssi_list)
-    #
-    # # for ex in tqdm(ex_list, total=total):
-    # #     load_and_evaluate_example(ex)
-    #
     print('Evaluating ROUGE...')
     results_dict = rouge_functions.rouge_eval(ref_dir, dec_dir, l_param=l_param)
-    # print("Results_dict: ", results_dict)
     rouge_functions.rouge_log(results_dict, my_log_dir, suffix=suffix)
 
     ssis_restricted = [ssi_triple[1][:ssi_triple[2]] for ssi_triple in ssi_list]
     ssi_lens = [len(source_indices) for source_indices in util.flatten_list_of_lists(ssis_restricted)]
-    # print ssi_lens
     num_singles = ssi_lens.count(1)
     num_pairs = ssi_lens.count(2)
     print ('Percent singles/pairs: %.2f %.2f' % (num_singles*100./len(ssi_lens), num_pairs*100./len(ssi_lens)))

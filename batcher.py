@@ -28,7 +28,6 @@ import data
 import nltk
 import util
 from absl import logging
-import pg_mmr_functions
 
 max_dec_sents = 10
 chronological_ssi = True
@@ -112,33 +111,11 @@ class Example(object):
                     self.enc_input_extend_vocab = self.enc_input_extend_vocab[:hps.max_enc_steps]
                 self.enc_len = len(self.enc_input_extend_vocab) # store the length after truncation but before padding
 
-            if self.hps.word_imp_reg:
-                self.enc_importances = self.get_enc_importances(self.tokenized_sents, abstract_words)
-
             # Get a verison of the reference summary where in-article OOVs are represented by their temporary article OOV id
             abs_ids_extend_vocab = data.abstract2ids(abstract_words, vocab, self.article_oovs)
 
             # Overwrite decoder target sequence so it uses the temp article OOV ids
             _, self.target = self.get_dec_inp_targ_seqs(abs_ids_extend_vocab, hps.max_dec_steps, start_decoding, stop_decoding)
-
-        if ssi is not None:
-            # Translate the similar source indices into masks over the encoder input
-            self.ssi_masks = []
-            for source_indices in ssi:
-                ssi_sent_mask = [0.] * len(raw_article_sents)
-                for source_idx in source_indices:
-                    if source_idx >= len(ssi_sent_mask):
-                        a=0
-                    ssi_sent_mask[source_idx] = 1.
-                ssi_mask = pg_mmr_functions.convert_to_word_level(ssi_sent_mask, self.tokenized_sents)
-                self.ssi_masks.append(ssi_mask)
-
-            summary_sent_tokens = [sent.strip().split() for sent in abstract_sentences]
-            if self.hps.ssi_data_path is None and len(self.ssi_masks) != len(summary_sent_tokens):
-                raise Exception('len(self.ssi_masks) != len(summary_sent_tokens)')
-
-            self.sent_indices = pg_mmr_functions.convert_to_word_level(list(range(len(summary_sent_tokens))), summary_sent_tokens).tolist()
-
 
         # Store the original strings
         self.original_article = article
@@ -149,16 +126,6 @@ class Example(object):
 
         self.doc_indices = doc_indices
         self.ssi = ssi
-
-    def get_enc_importances(self, tokenized_sents, abstract_words):
-        lemmatize = True
-        if lemmatize:
-            article_sent_tokens_lemma = util.lemmatize_sent_tokens(tokenized_sents)
-            summary_sent_tokens_lemma = util.lemmatize_sent_tokens([abstract_words])
-        article_tokens = util.flatten_list_of_lists(article_sent_tokens_lemma)
-        abstract_tokens = util.flatten_list_of_lists(summary_sent_tokens_lemma)
-        enc_importances = [1. if token in abstract_tokens else 0. for token in article_tokens]
-        return enc_importances
 
 
     def get_dec_inp_targ_seqs(self, sequence, max_len, start_id, stop_id):
@@ -202,86 +169,12 @@ class Example(object):
             while len(self.enc_input_extend_vocab) < max_len:
                 self.enc_input_extend_vocab.append(pad_id)
             self.enc_input_extend_vocab = self.enc_input_extend_vocab[:max_len]
-        if self.hps.word_imp_reg:
-            while len(self.enc_importances) < max_len:
-                self.enc_importances.append(0.)
-            self.enc_importances = self.enc_importances[:max_len]
-        if self.hps.tag_tokens:
-            while len(self.importance_mask) < max_len:
-                self.importance_mask.append(0)
-            self.importance_mask = self.importance_mask[:max_len]
 
 
     def pad_doc_indices(self, max_len, pad_id):
         """Pad the encoder input sequence with pad_id up to max_len."""
         while len(self.doc_indices) < max_len:
             self.doc_indices.append(pad_id)
-
-    def pad_ssi_masks(self, max_len, max_enc_len, pad_id):
-        self.ssi_masks_padded = []
-        """Pad the encoder input sequence with pad_id up to max_len."""
-        for idx in range(len(self.ssi_masks)):
-            """Pad the encoder input sequence with pad_id up to max_len."""
-            # self.ssi_masks[idx] = np.pad(self.ssi_masks[idx], (0, max_enc_len-len(self.ssi_masks[idx])), 'constant', constant_values=(pad_id, pad_id))
-            if len(self.ssi_masks[idx]) < max_enc_len:
-                to_add = np.pad(self.ssi_masks[idx], (0, max_enc_len-len(self.ssi_masks[idx])), 'constant', constant_values=(pad_id, pad_id))
-            else:
-                to_add = self.ssi_masks[idx][:max_enc_len]
-            self.ssi_masks_padded.append(to_add)
-
-        while len(self.ssi_masks_padded) < max_len:
-            self.ssi_masks_padded.append([pad_id] * max_enc_len)
-        self.ssi_masks_padded = self.ssi_masks_padded[:max_len]
-        self.ssi_masks_padded = np.array(self.ssi_masks_padded)
-
-    def pad_sent_indices(self, max_len, pad_id):
-        """Pad decoder input and target sequences with pad_id up to max_len."""
-        while len(self.sent_indices) < max_len:
-            self.sent_indices.append(pad_id)
-        self.sent_indices = self.sent_indices[:max_len]
-
-    def are_ssi_in_max_enc_steps(self, max_len):
-        cur_token_idx = 0
-        sent_idx_at_400 = 100000
-        for sent_idx, sent_tokens in enumerate(self.tokenized_sents):
-            for token in sent_tokens:
-                cur_token_idx += 1
-                if cur_token_idx >= max_len:
-                    sent_idx_at_400 = sent_idx
-                    break
-            if cur_token_idx >= max_len:
-                break
-        for source_indices in self.ssi:
-            for source_idx in source_indices:
-                if source_idx >= sent_idx_at_400:
-                    return False
-        return True
-
-    def fix_outside_and_empty_masks(self, max_enc_steps, max_enc_seq_len):
-        cur_token_idx = 0
-        sent_idx_at_400 = 100000
-        for sent_idx, sent_tokens in enumerate(self.tokenized_sents):
-            for token in sent_tokens:
-                cur_token_idx += 1
-                if cur_token_idx >= max_enc_steps:
-                    sent_idx_at_400 = sent_idx
-                    break
-            if cur_token_idx >= max_enc_steps:
-                break
-        new_masks = []
-        for source_indices_idx, source_indices in enumerate(self.ssi):
-            should_make_all_ones = False
-            for source_idx in source_indices:
-                if source_idx >= sent_idx_at_400:
-                    should_make_all_ones = True
-            if len(source_indices) == 0:
-                should_make_all_ones = True
-
-            if should_make_all_ones:
-                new_masks.append([1] * max_enc_steps)
-            else:
-                new_masks.append(self.ssi_masks[source_indices_idx])
-        self.ssi_masks = new_masks
 
 
 
@@ -299,8 +192,6 @@ class Batch(object):
         self.pad_id = vocab.word2id(data.PAD_TOKEN) # id of the PAD token used to pad sequences
         self.init_encoder_seq(example_list, hps) # initialize the input to the encoder
         self.init_decoder_seq(example_list, hps) # initialize the input and targets for the decoder
-        if example_list[0].ssi is not None:
-            self.init_ssi_masks(example_list, hps)
         self.store_orig_strings(example_list) # store the original strings
 
     def init_encoder_seq(self, example_list, hps):
@@ -354,16 +245,6 @@ class Batch(object):
             for i, ex in enumerate(example_list):
                 self.enc_batch_extend_vocab[i, :] = ex.enc_input_extend_vocab[:]
 
-        if hps.word_imp_reg:
-            self.enc_importances = np.zeros((hps.batch_size, max_enc_seq_len), dtype=np.float32)
-            for i, ex in enumerate(example_list):
-                self.enc_importances[i, :] = ex.enc_importances[:]
-
-        if hps.tag_tokens:
-            self.importance_masks = np.zeros((hps.batch_size, max_enc_seq_len), dtype=np.int32)
-            for i, ex in enumerate(example_list):
-                self.importance_masks[i, :] = ex.importance_mask[:]
-
 
     def init_decoder_seq(self, example_list, hps):
         """Initializes the following:
@@ -391,27 +272,6 @@ class Batch(object):
             for j in range(ex.dec_len):
                 self.dec_padding_mask[i][j] = 1
 
-    def init_ssi_masks(self, example_list, hps):
-        # Determine the maximum length of the encoder input sequence in this batch
-        max_enc_seq_len = max([ex.enc_len for ex in example_list])
-
-        for ex in example_list:
-            ex.fix_outside_and_empty_masks(hps.max_enc_steps, max_enc_seq_len)
-        for ex_idx, ex in enumerate(example_list):
-            ex.pad_ssi_masks(max_dec_sents, max_enc_seq_len, 0.)
-
-        self.ssi_masks_padded = np.stack([ex.ssi_masks_padded for ex in example_list])
-        # self.ssi_masks_padded = np.ones([len(example_list), max_dec_sents, max_enc_seq_len], dtype=float)
-
-        batch_sent_indices = []
-        for ex_idx, ex in enumerate(example_list):
-            ex.pad_sent_indices(hps.max_dec_steps, 0)
-            new_sent_indices = []
-            for sent_idx in ex.sent_indices:
-                new_sent_indices.append([ex_idx, sent_idx])
-            batch_sent_indices.append(new_sent_indices)
-        self.batch_sent_indices = np.array(batch_sent_indices, dtype=np.int32)
-
     def store_orig_strings(self, example_list):
         """Store the original article and abstract strings in the Batch object"""
         self.original_articles = [ex.original_article for ex in example_list] # list of lists
@@ -421,9 +281,6 @@ class Batch(object):
         self.original_abstracts = [ex.original_abstract for ex in example_list] # list of lists
         self.original_abstracts_sents = [ex.original_abstract_sents for ex in example_list] # list of list of lists
         self.all_original_abstracts_sents = [ex.all_original_abstract_sents for ex in example_list] # list of list of list of lists
-        if example_list[0].ssi is not None:
-            self.ssis = [ex.ssi for ex in example_list]
-            self.ssi_masks = [ex.ssi_masks for ex in example_list]
 
 
 class Batcher(object):
@@ -507,13 +364,6 @@ class Batcher(object):
                 data.example_generator(self._data_path, self._single_pass, self._cnn_500_dm_500, is_original=False))
         else:
             input_gen = self.text_generator(self._example_generator)
-        if self._hps.pg_mmr and self._hps.ssi_data_path != '':  # if use pg_mmr and bert
-            print (util.bcolors.OKGREEN + "Loading SSI from BERT at %s" % os.path.join(self._hps.ssi_data_path, 'ssi.pkl') + util.bcolors.ENDC)
-            with open(os.path.join(self._hps.ssi_data_path, 'ssi.pkl')) as f:
-                ssi_triple_list = pickle.load(f)
-                # ssi_list = [ssi_triple[1] for ssi_triple in ssi_triple_list]
-        else:
-            ssi_triple_list = None
         counter = 0
         while True:
             try:
@@ -525,17 +375,9 @@ class Batcher(object):
                     logging.info(
                         "single_pass mode is on, so we've finished reading dataset. This thread is stopping.")
                     self._finished_reading = True
-                    if ssi_triple_list is not None and counter < len(ssi_triple_list):
-                        raise Exception('Len of ssi list (%d) is greater than number of examples (%d)' % (len(ssi_triple_list), counter))
                     break
                 else:
                     raise Exception("single_pass mode is off but the example generator is out of data; error.")
-            if ssi_triple_list is not None:
-                if counter >= len(ssi_triple_list):
-                    raise Exception('Len of ssi list (%d) is less than number of examples (>=%d)' % (len(ssi_triple_list), counter))
-                ssi_length_extractive = ssi_triple_list[counter][2]
-                ssi = ssi_triple_list[counter][1]
-                ssi = ssi[:ssi_length_extractive]
 
             article = article
             abstracts = [abstract for abstract in abstracts]
@@ -653,14 +495,8 @@ class Batcher(object):
         # i = 0
 
         while True:
-            # i += 1
             e = next(example_generator) # e is a tf.Example
-            abstract_texts = []
-            raw_article_sents = []
-            # if self._hps.pg_mmr or '_sent' in self._hps.dataset_name:
             try:
-                # names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string'), ('corefs', 'json'), ('article_lcs_paths_list', 'delimited_list_of_list_of_lists')]
-                # names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string_list'), ('corefs', 'json'), ('article_lcs_paths_list', 'delimited_list_of_list_of_lists')]
                 names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string_list'), ('corefs', 'json')]
                 if self._hps.dataset_name == 'duc_2004':
                     names_to_types[2] = ('summary_text', 'string_list')
@@ -700,7 +536,6 @@ class Batcher(object):
             elif len(abstract_texts[0].strip().split()) < 3 and self._hps.skip_with_less_than_3:
                 print('Abstract has less than 3 tokens, so skipping\n*********************************************')
             else:
-                # print i
                 yield (article_text, abstract_texts, doc_indices_text, raw_article_sents, ssi)
 
 

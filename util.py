@@ -33,26 +33,14 @@ import string
 import struct
 import rouge_functions
 import json
-import spacy
 from spacy.tokens import Doc
 from spacy.lang.en import English
-import sys
 import nltk
 
-if sys.version_info >= (3, 0):
-    python_version = 3
-else:
-    python_version = 2
-
 nlp = English()
-try:
-    nlp2 = spacy.load('en', disable=['parser', 'ner'])
-except:
-    nlp2 = spacy.load('en_core_web_sm', disable=['parser', 'ner'])
 FLAGS = flags.FLAGS
 
 stop_words = set(stopwords.words('english'))
-CHUNK_SIZE = 1000
 
 class bcolors:
     HEADER = '\033[95m'
@@ -316,7 +304,6 @@ def rouge_1_similarity_matrix(article_sents, abstract_sents, vocab, metric, shou
         article_sents = [remove_stopwords_punctuation(sent) for sent in article_sents]
         abstract_sents = [remove_stopwords_punctuation(sent) for sent in abstract_sents]
     sentence_similarity_matrix = np.zeros([len(article_sents), len(abstract_sents)], dtype=float)
-    # abstract_sents_removed_periods = remove_period_ids(abstract_sents, vocab)
     for article_sent_idx, article_sent in enumerate(article_sents):
         abs_similarities = []
         for abstract_sent_idx, abstract_sent in enumerate(abstract_sents):
