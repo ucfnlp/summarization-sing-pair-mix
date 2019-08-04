@@ -1,6 +1,6 @@
 BSD License
 
-Copyright (c) 2018-present, UCF Natural Language Processing Group. 
+Copyright (c) 2019-present, UCF Natural Language Processing Group. 
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
