@@ -462,8 +462,8 @@ def singles_to_singles_pairs(distribution):
         out_dict[pair] = average
     return out_dict
 
-def combine_sim_and_imp(logan_similarity, logan_importances, lambda_val=0.6):
-    mmr = lambda_val*logan_importances - (1-lambda_val)*logan_similarity
+def combine_sim_and_imp(similarity, importances, lambda_val=0.6):
+    mmr = lambda_val*importances - (1-lambda_val)*similarity
     mmr = np.maximum(mmr, 0)
     return mmr
 

@@ -20,30 +20,22 @@ import glob
 import os
 import time
 
-import pickle
 import tensorflow as tf
 import beam_search
 import data
 import json
-import pyrouge
 import util
-from sumy.nlp.tokenizers import Tokenizer
 from tqdm import tqdm
 from absl import flags
 from absl import logging
-import logging as log
 import rouge_functions
 
-import importance_features
-import convert_data
 from batcher import create_batch
 import ssi_functions
 
 FLAGS = flags.FLAGS
 
 SECS_UNTIL_NEW_CKPT = 60	# max number of seconds before loading new checkpoint
-threshold = 0.5
-prob_to_keep = 0.33
 
 
 class BeamSearchDecoder(object):
@@ -71,8 +63,6 @@ class BeamSearchDecoder(object):
             # Make a descriptive decode directory name
             ckpt_name = "ckpt-" + ckpt_path.split('-')[-1] # this is something of the form "ckpt-123456"
             self._decode_dir = os.path.join(FLAGS.log_root, get_decode_dir_name(ckpt_name))
-# 			if os.path.exists(self._decode_dir):
-# 				raise Exception("single_pass decode directory %s should not already exist" % self._decode_dir)
 
         else: # Generic decode dir name
             self._decode_dir = os.path.join(FLAGS.log_root, "decode")
@@ -96,7 +86,6 @@ class BeamSearchDecoder(object):
         """Decode examples until data is exhausted (if FLAGS.single_pass) and return, or decode indefinitely, loading latest checkpoint at regular intervals"""
         t0 = time.time()
         counter = 0
-        attn_dir = os.path.join(self._decode_dir, 'attn_vis_data')
         total = len(glob.glob(self._batcher._data_path)) * 1000
         pbar = tqdm(total=total)
         while True:
@@ -143,7 +132,6 @@ class BeamSearchDecoder(object):
         pbar.close()
 
     def decode_iteratively(self, example_generator, total, names_to_types, ssi_list, hps):
-        attn_vis_idx = 0
         for example_idx, example in enumerate(tqdm(example_generator, total=total)):
             raw_article_sents, groundtruth_similar_source_indices_list, groundtruth_summary_text, corefs = util.unpack_tf_example(
                 example, names_to_types)
@@ -177,9 +165,6 @@ class BeamSearchDecoder(object):
             best_hyps = []
             highlight_html_total = ''
             for ssi_idx, ssi in enumerate(sys_ssi):
-                # selected_article_lcs_paths = article_lcs_paths_list[ssi_idx]
-                # ssi, selected_article_lcs_paths = util.make_ssi_chronological(ssi, selected_article_lcs_paths)
-                # selected_article_lcs_paths = [selected_article_lcs_paths]
                 selected_raw_article_sents = util.reorder(raw_article_sents, ssi)
                 selected_article_text = ' '.join( [' '.join(sent) for sent in util.reorder(article_sent_tokens, ssi)] )
                 selected_doc_indices_str = '0 ' * len(selected_article_text.split())
@@ -190,20 +175,8 @@ class BeamSearchDecoder(object):
 
                 batch = create_batch(selected_article_text, selected_groundtruth_summ_sent, selected_doc_indices_str, selected_raw_article_sents, FLAGS.batch_size, hps, self._vocab)
 
-                original_article = batch.original_articles[0]  # string
-                original_abstract = batch.original_abstracts[0]  # string
-                article_withunks = data.show_art_oovs(original_article, self._vocab)  # string
-                abstract_withunks = data.show_abs_oovs(original_abstract, self._vocab,
-                                                       (batch.art_oovs[0] if FLAGS.pointer_gen else None))  # string
-                # article_withunks = data.show_art_oovs(original_article, self._vocab) # string
-                # abstract_withunks = data.show_abs_oovs(original_abstract, self._vocab, (batch.art_oovs[0] if FLAGS.pointer_gen else None)) # string
-
-                if FLAGS.first_intact and ssi_idx == 0:
-                    decoded_words = selected_article_text.strip().split()
-                    decoded_output = selected_article_text
-                else:
-                    decoded_words, decoded_output, best_hyp = decode_example(self._sess, self._model, self._vocab, batch, example_idx, hps)
-                    best_hyps.append(best_hyp)
+                decoded_words, decoded_output, best_hyp = decode_example(self._sess, self._model, self._vocab, batch, example_idx, hps)
+                best_hyps.append(best_hyp)
                 final_decoded_words.extend(decoded_words)
                 final_decoded_outpus += decoded_output
 
@@ -221,12 +194,6 @@ class BeamSearchDecoder(object):
                                                                                    article_lcs_paths_list=highlight_smooth_article_lcs_paths_list)
                     highlight_html_total += '<u>System Summary</u><br><br>' + highlighted_html + '<br><br>'
 
-                if FLAGS.attn_vis and example_idx < 200:
-                    self.write_for_attnvis(article_withunks, abstract_withunks, decoded_words, best_hyp.attn_dists,
-                                           best_hyp.p_gens,
-                                           attn_vis_idx)  # write info to .json file for visualization tool
-                    attn_vis_idx += 1
-
                 if len(final_decoded_words) >= 100:
                     break
 
@@ -235,17 +202,12 @@ class BeamSearchDecoder(object):
                 ssi_functions.write_highlighted_html(highlight_html_total, self._highlight_dir, example_idx)
 
             rouge_functions.write_for_rouge(groundtruth_summ_sents, None, example_idx, self._rouge_ref_dir, self._rouge_dec_dir, decoded_words=final_decoded_words, log=False) # write ref summary and decoded summary to file, to eval with pyrouge later
-            # if FLAGS.attn_vis:
-            #     self.write_for_attnvis(article_withunks, abstract_withunks, decoded_words, best_hyp.attn_dists, best_hyp.p_gens, example_idx) # write info to .json file for visualization tool
             example_idx += 1 # this is how many examples we've decoded
 
         logging.info("Decoder has finished reading dataset for single_pass.")
         logging.info("Output has been saved in %s and %s.", self._rouge_ref_dir, self._rouge_dec_dir)
         if len(os.listdir(self._rouge_ref_dir)) != 0:
-            if FLAGS.dataset_name == 'xsum':
-                l_param = 100
-            else:
-                l_param = 100
+            l_param = 100
             logging.info("Now starting ROUGE eval...")
             results_dict = rouge_functions.rouge_eval(self._rouge_ref_dir, self._rouge_dec_dir, l_param=l_param)
             rouge_functions.rouge_log(results_dict, self._decode_dir)
@@ -312,76 +274,6 @@ class BeamSearchDecoder(object):
         with open(output_fname, 'w') as output_file:
             json.dump(to_write, output_file)
         # logging.info('Wrote visualization data to %s', output_fname)
-
-    def calc_importance_features(self, data_path, hps, model_save_path, docs_desired):
-        """Calculate sentence-level features and save as a dataset"""
-        data_path_filter_name = os.path.basename(data_path)
-        if 'train' in data_path_filter_name:
-            data_split = 'train'
-        elif 'val' in data_path_filter_name:
-            data_split = 'val'
-        elif 'test' in data_path_filter_name:
-            data_split = 'test'
-        else:
-            data_split = 'feats'
-        if 'cnn-dailymail' in data_path:
-            inst_per_file = 1000
-        else:
-            inst_per_file = 1
-        filelist = glob.glob(data_path)
-        num_documents_desired = docs_desired
-        pbar = tqdm(initial=0, total=num_documents_desired)
-
-        instances = []
-        sentences = []
-        counter = 0
-        doc_counter = 0
-        file_counter = 0
-        while True:
-            batch = self._batcher.next_batch()	# 1 example repeated across batch
-            if doc_counter >= num_documents_desired:
-                save_path = os.path.join(model_save_path, data_split + '_%06d'%file_counter)
-                with open(save_path, 'wb') as f:
-                    pickle.dump(instances, f)
-                print(('Saved features at %s' % save_path))
-                return
-
-            if batch is None: # finished decoding dataset in single_pass mode
-                raise Exception('We havent reached the num docs desired (%d), instead we reached (%d)' % (num_documents_desired, doc_counter))
-
-
-            batch_enc_states, _ = self._model.run_encoder(self._sess, batch)
-            for batch_idx, enc_states in enumerate(batch_enc_states):
-                art_oovs = batch.art_oovs[batch_idx]
-                all_original_abstracts_sents = batch.all_original_abstracts_sents[batch_idx]
-
-                tokenizer = Tokenizer('english')
-                # List of lists of words
-                enc_sentences, enc_tokens = batch.tokenized_sents[batch_idx], batch.word_ids_sents[batch_idx]
-                enc_sent_indices = importance_features.get_sent_indices(enc_sentences, batch.doc_indices[batch_idx])
-                enc_sentences_str = [' '.join(sent) for sent in enc_sentences]
-
-                sent_representations_separate = importance_features.get_separate_enc_states(self._model, self._sess, enc_sentences, self._vocab, hps)
-
-                sent_indices = enc_sent_indices
-                sent_reps = importance_features.get_importance_features_for_article(
-                    enc_states, enc_sentences, sent_indices, tokenizer, sent_representations_separate)
-                y, y_hat = importance_features.get_ROUGE_Ls(art_oovs, all_original_abstracts_sents, self._vocab, enc_tokens)
-                binary_y = importance_features.get_best_ROUGE_L_for_each_abs_sent(art_oovs, all_original_abstracts_sents, self._vocab, enc_tokens)
-                for rep_idx, rep in enumerate(sent_reps):
-                    rep.y = y[rep_idx]
-                    rep.binary_y = binary_y[rep_idx]
-
-                for rep_idx, rep in enumerate(sent_reps):
-                    # Keep all sentences with importance above threshold. All others will be kept with a probability of prob_to_keep
-                    if FLAGS.importance_fn == 'svr':
-                        instances.append(rep)
-                        sentences.append(sentences)
-                        counter += 1 # this is how many examples we've decoded
-            doc_counter += len(batch_enc_states)
-            pbar.update(len(batch_enc_states))
-
-
 
 def decode_example(sess, model, vocab, batch, counter, hps):
     # Run beam search to get best Hypothesis

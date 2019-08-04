@@ -69,7 +69,7 @@ flags.DEFINE_bool(
     "models and False for cased models.")
 
 flags.DEFINE_integer(
-    "max_seq_length", 128,
+    "max_seq_length", 64,
     "The maximum total input sequence length after WordPiece tokenization. "
     "Sequences longer than this will be truncated, and sequences shorter "
     "than this will be padded.")
@@ -88,7 +88,7 @@ flags.DEFINE_integer("eval_batch_size", 8, "Total batch size for eval.")
 
 flags.DEFINE_integer("predict_batch_size", 8, "Total batch size for predict.")
 
-flags.DEFINE_float("learning_rate", 5e-5, "The initial learning rate for Adam.")
+flags.DEFINE_float("learning_rate", 2e-5, "The initial learning rate for Adam.")
 
 flags.DEFINE_float("num_train_epochs", 3.0,
                    "Total number of training epochs to perform.")
@@ -711,12 +711,6 @@ def main(_):
 
   data_root = '../data/bert'
   output_folder = 'output'
-  if FLAGS.sentemb:
-      output_folder += '_sentemb'
-  if FLAGS.artemb:
-      output_folder += '_artemb'
-  if FLAGS.plushidden:
-      output_folder += '_plushidden'
   if FLAGS.dataset_name == 'duc_2004':
       FLAGS.model_dir = os.path.join(data_root, 'cnn_dm', FLAGS.singles_and_pairs, output_folder)
   else:

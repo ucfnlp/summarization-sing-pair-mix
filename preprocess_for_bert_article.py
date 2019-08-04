@@ -3,13 +3,11 @@
 
 
 
-import itertools
 import os
 from tqdm import tqdm
 import numpy as np
 from absl import flags
 from absl import app
-import pickle
 import util
 import sys
 import glob

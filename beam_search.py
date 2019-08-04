@@ -19,7 +19,6 @@
 import numpy as np
 import data
 from absl import flags
-import util
 
 FLAGS = flags.FLAGS
 
@@ -97,10 +96,7 @@ class Hypothesis(object):
         return self.log_prob / len(self.tokens)
 
 def results_still_too_small(results):
-    if FLAGS.better_beam_search:
-        return True
-    else:
-        return len(results) < FLAGS.beam_size
+    return len(results) < FLAGS.beam_size
 
 def run_beam_search(sess, model, vocab, batch, ex_index, hps):
     """Performs beam search decoding on the given example.
@@ -182,8 +178,8 @@ def run_beam_search(sess, model, vocab, batch, ex_index, hps):
                     h.already_added = True
             else:  # hasn't reached stop token, so continue to extend this hypothesis
                 hyps.append(h)
-            if len(hyps) == FLAGS.beam_size or (not FLAGS.better_beam_search and len(results) == FLAGS.beam_size):
-                # Once we've collected beam_size-many hypotheses for the next step, or beam_size-many complete hypotheses, stop. (Unless it's Logan's better beam search)
+            if len(hyps) == FLAGS.beam_size or (len(results) == FLAGS.beam_size):
+                # Once we've collected beam_size-many hypotheses for the next step, or beam_size-many complete hypotheses, stop.
                 break
 
         steps += 1

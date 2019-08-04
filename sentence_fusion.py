@@ -3,7 +3,6 @@ import glob
 import numpy as np
 import os
 import time
-from tqdm import tqdm
 
 import tensorflow as tf
 from collections import namedtuple
@@ -11,14 +10,9 @@ from collections import namedtuple
 import data
 import util
 from data import Vocab
-from batcher import Batcher, create_batch
 from model import SummarizationModel
-from decode import BeamSearchDecoder, decode_example
-import convert_data
+from decode import BeamSearchDecoder
 import pickle
-from sklearn.feature_extraction.text import TfidfVectorizer
-from nltk.stem.porter import PorterStemmer
-import dill
 from absl import app, flags, logging
 import random
 
@@ -75,8 +69,6 @@ flags.DEFINE_boolean('debug', False, "Run in tensorflow's debug mode (watches fo
 
 # PG-MMR settings
 flags.DEFINE_string('importance_fn', 'tfidf', 'Which model to use for calculating importance. Must be one of {svr, tfidf, oracle}.')
-flags.DEFINE_float('lambda_val', 0.6, 'Lambda factor to reduce similarity amount to subtract from importance. Set to 0.5 to make importance and similarity have equal weight.')
-flags.DEFINE_integer('mute_k', 7, 'Pick top k sentences to select and mute all others. Set to -1 to turn off.')
 flags.DEFINE_boolean('retain_mmr_values', False, 'Only used if using mute mode. If true, then the mmr being\
                             multiplied by alpha will not be a 0/1 mask, but instead keeps their values.')
 flags.DEFINE_string('similarity_fn', 'rouge_l', 'Which similarity function to use when calculating\
@@ -87,28 +79,14 @@ flags.DEFINE_boolean('attn_vis', False, 'If true, then output attention visualiz
 
 flags.DEFINE_string('singles_and_pairs', 'both',
                     'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
-# flags.DEFINE_string('ssi_exp_name', 'lambdamart_singles',
-#                     'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
 flags.DEFINE_boolean('upper_bound', False, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
-flags.DEFINE_boolean('cnn_dm_pg', False, 'If true, use PG trained on CNN/DM for testing.')
-flags.DEFINE_boolean('websplit', False, 'If true, use PG trained on Websplit for testing.')
 flags.DEFINE_boolean('use_bert', True, 'If true, use PG trained on Websplit for testing.')
-if 'sentemb' not in flags.FLAGS:
-    flags.DEFINE_boolean('sentemb', True, 'Which mode to run in. Must be in {write_to_file, generate_summaries}.')
-if 'artemb' not in flags.FLAGS:
-    flags.DEFINE_boolean('artemb', True, 'Which mode to run in. Must be in {write_to_file, generate_summaries}.')
-if 'plushidden' not in flags.FLAGS:
-    flags.DEFINE_boolean('plushidden', True, 'Which mode to run in. Must be in {write_to_file, generate_summaries}.')
+flags.DEFINE_boolean('sentemb', True, 'Which mode to run in. Must be in {write_to_file, generate_summaries}.')
+flags.DEFINE_boolean('artemb', True, 'Which mode to run in. Must be in {write_to_file, generate_summaries}.')
+flags.DEFINE_boolean('plushidden', True, 'Which mode to run in. Must be in {write_to_file, generate_summaries}.')
 flags.DEFINE_boolean('skip_with_less_than_3', True,
                     'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
-flags.DEFINE_string('original_dataset_name', '',
-                    'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
-flags.DEFINE_string('ssi_data_path', '',
-                    'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
-flags.DEFINE_boolean('better_beam_search', False,
-                    'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
-flags.DEFINE_boolean('first_intact', False, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
-flags.DEFINE_boolean('by_instance', False, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
+flags.DEFINE_boolean('by_instance', True, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
 
 
 _exp_name = 'lambdamart'
@@ -133,12 +111,7 @@ def main(unused_argv):
         raise Exception("Problem with flags: %s" % unused_argv)
 
     extractor = 'bert' if FLAGS.use_bert else 'lambdamart'
-    if FLAGS.cnn_dm_pg:
-        pretrained_dataset = 'cnn_dm'
-    elif FLAGS.websplit:
-        pretrained_dataset = 'websplit'
-    else:
-        pretrained_dataset = FLAGS.dataset_name
+    pretrained_dataset = FLAGS.dataset_name
     if FLAGS.dataset_name == 'duc_2004':
         pretrained_dataset = 'cnn_dm'
     if FLAGS.singles_and_pairs == 'both':
@@ -151,35 +124,13 @@ def main(unused_argv):
         dataset_articles = FLAGS.dataset_name + '_singles'
 
 
-    bert_suffix = ''
-    # if FLAGS.use_bert:
-    #     if FLAGS.sentemb:
-    #         FLAGS.exp_name += '_sentemb'
-    #         # bert_suffix += '_sentemb'
-    if FLAGS.use_bert:
-        if FLAGS.sentemb:
-            FLAGS.exp_name += '_sentemb'
-            bert_suffix += '_sentemb'
-        if FLAGS.artemb:
-            FLAGS.exp_name += '_artemb'
-            bert_suffix += '_artemb'
-        if FLAGS.plushidden:
-            FLAGS.exp_name += '_plushidden'
-            bert_suffix += '_plushidden'
     if FLAGS.upper_bound:
         FLAGS.exp_name = FLAGS.exp_name + '_upperbound'
         ssi_list = None     # this is if we are doing the upper bound evaluation (ssi_list comes straight from the groundtruth)
     else:
-        my_log_dir = os.path.join(log_dir, '%s_%s_%s%s' % (FLAGS.dataset_name, extractor, FLAGS.singles_and_pairs, bert_suffix))
+        my_log_dir = os.path.join(log_dir, '%s_%s_%s' % (FLAGS.dataset_name, extractor, FLAGS.singles_and_pairs))
         with open(os.path.join(my_log_dir, 'ssi.pkl'), 'rb') as f:
             ssi_list = pickle.load(f)
-        FLAGS.ssi_data_path = my_log_dir
-    if FLAGS.cnn_dm_pg:
-        FLAGS.exp_name = FLAGS.exp_name + '_cnntrained'
-    if FLAGS.websplit:
-        FLAGS.exp_name = FLAGS.exp_name + '_websplittrained'
-    if FLAGS.first_intact:
-        FLAGS.exp_name = FLAGS.exp_name + '_firstintact'
 
 
 
@@ -201,19 +152,10 @@ def main(unused_argv):
 
     print(util.bcolors.OKGREEN + "Experiment path: " + FLAGS.log_root + util.bcolors.ENDC)
 
-
     if FLAGS.dataset_name == 'duc_2004':
         vocab = Vocab(FLAGS.vocab_path + '_' + 'cnn_dm', FLAGS.vocab_size) # create a vocabulary
     else:
-        vocab_datasets = [os.path.basename(file_path).split('vocab_')[1] for file_path in glob.glob(FLAGS.vocab_path + '_*')]
-        original_dataset_name = [file_name for file_name in vocab_datasets if file_name in FLAGS.dataset_name]
-        if len(original_dataset_name) > 1:
-            raise Exception('Too many choices for vocab file')
-        if len(original_dataset_name) < 1:
-            raise Exception('No vocab file for dataset created. Run make_vocab.py --dataset_name=<my original dataset name>')
-        original_dataset_name = original_dataset_name[0]
-        FLAGS.original_dataset_name = original_dataset_name
-        vocab = Vocab(FLAGS.vocab_path + '_' + original_dataset_name, FLAGS.vocab_size) # create a vocabulary
+        vocab = Vocab(FLAGS.vocab_path + '_' + FLAGS.dataset_name, FLAGS.vocab_size) # create a vocabulary
 
     # If in decode mode, set batch_size = beam_size
     # Reason: in decode mode, we decode one example at a time.

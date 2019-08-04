@@ -18,8 +18,6 @@
 """This is the top-level file to test your summarization model"""
 
 import os
-import shutil
-from distutils.dir_util import copy_tree
 
 import tensorflow as tf
 from collections import namedtuple
@@ -27,12 +25,6 @@ from data import Vocab
 from batcher import Batcher
 from model import SummarizationModel
 from decode import BeamSearchDecoder
-import convert_data
-import importance_features
-import pickle
-from sklearn.feature_extraction.text import TfidfVectorizer
-from nltk.stem.porter import PorterStemmer
-import dill
 from absl import app, flags, logging
 import random
 import util
@@ -40,12 +32,10 @@ import time
 from tensorflow.python import debug as tf_debug
 from tqdm import tqdm
 import numpy as np
-import glob
 
 random.seed(222)
 FLAGS = flags.FLAGS
 original_pretrained_path = {'cnn_dm': 'logs/pretrained_model_tf1.2.1',
-                            # 'xsum': 'logs/xsum',
                             'xsum': 'logs/xsum',
                             'duc_2004': 'logs/pretrained_model_tf1.2.1'
                             }
@@ -74,7 +64,7 @@ flags.DEFINE_string('dataset_split', 'test', 'Which dataset split to use. Must b
 flags.DEFINE_integer('hidden_dim', 256, 'dimension of RNN hidden states')
 flags.DEFINE_integer('emb_dim', 128, 'dimension of word embeddings')
 flags.DEFINE_integer('batch_size', 16, 'minibatch size')
-flags.DEFINE_integer('max_enc_steps', 100000, 'max timesteps of encoder (max source text tokens)')
+flags.DEFINE_integer('max_enc_steps', 400, 'max timesteps of encoder (max source text tokens)')
 flags.DEFINE_integer('max_dec_steps', 120, 'max timesteps of decoder (max summary tokens)')
 flags.DEFINE_integer('beam_size', 4, 'beam size for beam search decoding.')
 flags.DEFINE_integer('min_dec_steps', 100, 'Minimum sequence length of generated summary. Applies only for beam search decoding mode')
@@ -98,42 +88,20 @@ flags.DEFINE_boolean('restore_best_model', False, 'Restore the best model in the
 
 # Debugging. See https://www.tensorflow.org/programmers_guide/debugger
 flags.DEFINE_boolean('debug', False, "Run in tensorflow's debug mode (watches for NaN/inf values)")
-
-# PG-MMR settings
-flags.DEFINE_string('importance_fn', 'tfidf', 'Which model to use for calculating importance. Must be one of {svr, tfidf, oracle}.')
-flags.DEFINE_float('lambda_val', 0.6, 'Lambda factor to reduce similarity amount to subtract from importance. Set to 0.5 to make importance and similarity have equal weight.')
-flags.DEFINE_integer('mute_k', 7, 'Pick top k sentences to select and mute all others. Set to -1 to turn off.')
-flags.DEFINE_boolean('retain_mmr_values', False, 'Only used if using mute mode. If true, then the mmr being\
-                            multiplied by alpha will not be a 0/1 mask, but instead keeps their values.')
-flags.DEFINE_string('similarity_fn', 'rouge_l', 'Which similarity function to use when calculating\
-                            sentence similarity or coverage. Must be one of {rouge_l, ngram_similarity}')
-flags.DEFINE_boolean('plot_distributions', False, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
-flags.DEFINE_integer('num_iterations', 60000, 'How many iterations to run. Set to -1 to run indefinitely.')
-
 flags.DEFINE_boolean('attn_vis', False, 'If true, then output attention visualization during decoding.')
-flags.DEFINE_boolean('lambdamart_input', True, 'If true, then do postprocessing to combine sentences from the same example.')
+
+# SingPairMix settings
+flags.DEFINE_integer('num_iterations', 60000, 'How many iterations to run. Set to -1 to run indefinitely.')
 flags.DEFINE_string('singles_and_pairs', 'both',
                     'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
-flags.DEFINE_string('original_dataset_name', '',
-                    'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
 flags.DEFINE_boolean('skip_with_less_than_3', True,
-                    'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
-flags.DEFINE_boolean('use_bert', True, 'If true, use PG trained on Websplit for testing.')
-flags.DEFINE_boolean('upper_bound', False, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
-flags.DEFINE_string('ssi_data_path', '',
-                    'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
+                    'Skips articles and abstracts with less than 3 tokens.')
 # flags.DEFINE_boolean('l_sents', True, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
-flags.DEFINE_boolean('tag_tokens', False, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
-flags.DEFINE_boolean('by_instance', False, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
+flags.DEFINE_boolean('by_instance', True, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
 
 
-flags.DEFINE_bool(
-    "sentemb", True,
-    "Whether to lower case the input text. Should be True for uncased "
-    "models and False for cased models.")
-
+flags.DEFINE_bool("sentemb", True, "Whether to lower case the input text. Should be True for uncased models and False for cased models.")
 flags.DEFINE_bool("artemb", True, "Whether to use TPU or GPU/CPU.")
-
 flags.DEFINE_bool("plushidden", True, "Whether to use TPU or GPU/CPU.")
 
 
@@ -336,39 +304,6 @@ def run_eval(model, batcher, vocab):
         if train_step % 100 == 0:
             summary_writer.flush()
 
-def calc_features(cnn_dm_train_data_path, hps, vocab, batcher, save_path):
-    if not os.path.exists(save_path): os.makedirs(save_path)
-    decode_model_hps = hps  # This will be the hyperparameters for the decoder model
-    model = SummarizationModel(decode_model_hps, vocab)
-    decoder = BeamSearchDecoder(model, batcher, vocab)
-    decoder.calc_importance_features(cnn_dm_train_data_path, hps, save_path, 1000)
-
-def fit_tfidf_vectorizer(hps, vocab):
-    if not os.path.exists(os.path.join(FLAGS.actual_log_root, 'tfidf_vectorizer')):
-        os.makedirs(os.path.join(FLAGS.actual_log_root, 'tfidf_vectorizer'))
-
-    decode_model_hps = hps._replace(max_dec_steps=1, batch_size=1) # The model is configured with max_dec_steps=1 because we only ever run one step of the decoder at a time (to do beam search). Note that the batcher is initialized with max_dec_steps equal to e.g. 100 because the batches need to contain the full summaries
-
-    batcher = Batcher(FLAGS.data_path, vocab, decode_model_hps, single_pass=FLAGS.single_pass)
-    all_sentences = []
-    while True:
-        batch = batcher.next_batch()	# 1 example repeated across batch
-        if batch is None: # finished decoding dataset in single_pass mode
-            break
-        all_sentences.extend(batch.raw_article_sents[0])
-
-    stemmer = PorterStemmer()
-
-    class StemmedTfidfVectorizer(TfidfVectorizer):
-        def build_analyzer(self):
-            analyzer = super(TfidfVectorizer, self).build_analyzer()
-            return lambda doc: (stemmer.stem(w) for w in analyzer(doc))
-
-    tfidf_vectorizer = StemmedTfidfVectorizer(analyzer='word', stop_words='english', ngram_range=(1, 3), max_df=0.7)
-    tfidf_vectorizer.fit_transform(all_sentences)
-    return tfidf_vectorizer
-
-log_dir = 'logs'
 
 def main(unused_argv):
     if len(unused_argv) != 1: # prints a message if you've entered flags incorrectly
@@ -378,49 +313,10 @@ def main(unused_argv):
     if not os.path.exists(os.path.join(FLAGS.data_root, FLAGS.dataset_name)) or len(os.listdir(os.path.join(FLAGS.data_root, FLAGS.dataset_name))) == 0:
         raise Exception('No TF example data found at %s.' % os.path.join(FLAGS.data_root, FLAGS.dataset_name))
 
-    if FLAGS.mode == 'decode':
-        extractor = '_bert' if FLAGS.use_bert else '_lambdamart'
-        FLAGS.use_pretrained = True
-        FLAGS.single_pass = True
-    else:
-        extractor = ''
-    pretrained_dataset = FLAGS.dataset_name
-    if FLAGS.dataset_name == 'duc_2004':
-        pretrained_dataset = 'cnn_dm'
     if FLAGS.singles_and_pairs == 'both':
-        FLAGS.exp_name = FLAGS.exp_name + extractor + '_both'
-        if FLAGS.mode == 'decode':
-            FLAGS.pretrained_path = os.path.join(FLAGS.log_root, pretrained_dataset + '_pgmmr_both')
-        dataset_articles = FLAGS.dataset_name
+        FLAGS.exp_name = FLAGS.exp_name + '_both'
     elif FLAGS.singles_and_pairs == 'singles':
-        FLAGS.exp_name = FLAGS.exp_name + extractor + '_singles'
-        if FLAGS.mode == 'decode':
-            FLAGS.pretrained_path = os.path.join(FLAGS.log_root, pretrained_dataset + '_pgmmr_singles')
-        dataset_articles = FLAGS.dataset_name + '_singles'
-
-    extractor = 'bert' if FLAGS.use_bert else 'lambdamart'
-    bert_suffix = ''
-    if FLAGS.use_bert:
-        if FLAGS.sentemb:
-            bert_suffix += '_sentemb'
-        if FLAGS.artemb:
-            bert_suffix += '_artemb'
-        if FLAGS.plushidden:
-            bert_suffix += '_plushidden'
-        # if FLAGS.mode == 'decode':
-        #     if FLAGS.sentemb:
-        #         FLAGS.exp_name += '_sentemb'
-        #     if FLAGS.artemb:
-        #         FLAGS.exp_name += '_artemb'
-        #     if FLAGS.plushidden:
-        #         FLAGS.exp_name += '_plushidden'
-    if FLAGS.upper_bound:
-        FLAGS.exp_name = FLAGS.exp_name + '_upperbound'
-        ssi_list = None     # this is if we are doing the upper bound evaluation (ssi_list comes straight from the groundtruth)
-    else:
-        if FLAGS.mode == 'decode':
-            my_log_dir = os.path.join(log_dir, '%s_%s_%s%s' % (FLAGS.dataset_name, extractor, FLAGS.singles_and_pairs, bert_suffix))
-            FLAGS.ssi_data_path = my_log_dir
+        FLAGS.exp_name = FLAGS.exp_name + '_singles'
 
     logging.set_verbosity(logging.INFO) # choose what level of logging you want
     logging.info('Starting seq2seq_attention in %s mode...', (FLAGS.mode))
@@ -435,15 +331,7 @@ def main(unused_argv):
     if FLAGS.dataset_name == 'duc_2004':
         vocab = Vocab(FLAGS.vocab_path + '_' + 'cnn_dm', FLAGS.vocab_size) # create a vocabulary
     else:
-        vocab_datasets = [os.path.basename(file_path).split('vocab_')[1] for file_path in glob.glob(FLAGS.vocab_path + '_*')]
-        original_dataset_name = [file_name for file_name in vocab_datasets if file_name in FLAGS.dataset_name]
-        if len(original_dataset_name) > 1:
-            raise Exception('Too many choices for vocab file')
-        if len(original_dataset_name) < 1:
-            raise Exception('No vocab file for dataset created. Run make_vocab.py --dataset_name=<my original dataset name>')
-        original_dataset_name = original_dataset_name[0]
-        FLAGS.original_dataset_name = original_dataset_name
-        vocab = Vocab(FLAGS.vocab_path + '_' + original_dataset_name, FLAGS.vocab_size) # create a vocabulary
+        vocab = Vocab(FLAGS.vocab_path + '_' + FLAGS.dataset_name, FLAGS.vocab_size) # create a vocabulary
 
 
     # If in decode mode, set batch_size = beam_size

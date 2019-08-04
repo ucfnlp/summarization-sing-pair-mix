@@ -41,7 +41,6 @@ def write_highlighted_html(html, out_dir, example_idx):
 
 highlight_colors = ['aqua', 'lime', 'yellow', '#FF7676', '#B9968D', '#D7BDE2', '#D6DBDF', '#F852AF', '#00FF8B', '#FD933A', '#8C8DFF', '#965DFF']
 hard_highlight_colors = ['#00BBFF', '#00BB00', '#F4D03F', '#BB5454', '#A16252', '#AF7AC5', '#AEB6BF', '#FF008F', '#0ECA74', '#FF7400', '#6668FF', '#7931FF']
-# hard_highlight_colors = ['blue', 'green', 'orange', 'red']
 
 def start_tag(color):
     return "<font color='" + color + "'>"
@@ -72,15 +71,11 @@ def html_highlight_sents_in_article(summary_sent_tokens, similar_source_indices_
             similar_source_indices = similar_source_indices_list[summ_sent_idx]
         except:
             similar_source_indices = []
-            a=0
-        # lcs_paths = lcs_paths_list[summ_sent_idx]
-
 
         for token_idx, token in enumerate(summ_sent):
             insert_string = token + ' '
             for source_indices_idx, source_indices in enumerate(similar_source_indices):
                 if source_indices_idx == 0:
-                    # print summ_sent_idx
                     try:
                         color = hard_highlight_colors[min(summ_sent_idx, len(highlight_colors)-1)]
                     except:
@@ -89,15 +84,9 @@ def html_highlight_sents_in_article(summary_sent_tokens, similar_source_indices_
                         print('\n')
                 else:
                     color = highlight_colors[min(summ_sent_idx, len(highlight_colors)-1)]
-                # if token_idx in lcs_paths[source_indices_idx]:
-                # if lcs_paths_list is not None:
-                #     lcs_paths_list[summ_sent_idx][source_indices_idx]
                 if lcs_paths_list is None or token_idx in lcs_paths_list[summ_sent_idx][source_indices_idx]:
                     insert_string = start_tag_highlight(color) + token + ' ' + end_tag
                     break
-                # else:
-                #     insert_string = start_tag_highlight(highlight_colors[source_indices_idx]) + token + end_tag
-                #     break
             out_str += insert_string
         out_str += '<br><br>'
 
@@ -117,12 +106,10 @@ def html_highlight_sents_in_article(summary_sent_tokens, similar_source_indices_
         else:
             colors = [highlight_colors[min(summ_sent_idx, len(highlight_colors)-1)] for summ_sent_idx in summ_sent_indices]
             hard_colors = [hard_highlight_colors[min(summ_sent_idx, len(highlight_colors)-1)] for summ_sent_idx in summ_sent_indices]
-            # article_lcs_paths = article_lcs_paths_list[summ_sent_idx]
         source_sentence = article_sent_tokens[sent_idx]
         for token_idx, token in enumerate(source_sentence):
             if priorities is None:
                 insert_string = token + ' '
-            # elif token_idx in article_lcs_paths[priority]:
             else:
                 insert_string = token + ' '
                 for priority_idx in reversed(list(range(len(priorities)))):
@@ -133,8 +120,6 @@ def html_highlight_sents_in_article(summary_sent_tokens, similar_source_indices_
                             insert_string = start_tag_highlight(hard_colors[priority_idx]) + token + ' ' + end_tag
                         else:
                             insert_string = start_tag_highlight(colors[priority_idx]) + token + ' ' + end_tag
-            # else:
-                # insert_string = start_tag_highlight(highlight_colors[priority]) + token + end_tag
             cur_token_idx += 1
             out_str += insert_string
         out_str += '<br>'
@@ -158,7 +143,7 @@ def get_simple_source_indices_list(summary_sent_tokens, article_sent_tokens, voc
     smooth_article_paths_list = []
     for summ_sent in summary_sent_tokens_lemma:
         similarities = get_sent_similarities(summ_sent, article_sent_tokens_lemma, vocab)
-        similar_source_indices, lcs_paths, smooth_article_paths = get_similar_source_sents_by_lcs(
+        similar_source_indices, lcs_paths, smooth_article_paths = get_similar_source_sents_recursive(
             summ_sent, summ_sent, list(range(len(summ_sent))), article_sent_tokens_lemma, vocab, similarities, 0,
             sentence_limit, min_matched_tokens)
         similar_source_indices_list.append(similar_source_indices)
@@ -178,7 +163,7 @@ def get_simple_source_indices_list(summary_sent_tokens, article_sent_tokens, voc
 
 
 # Recursive function
-def get_similar_source_sents_by_lcs(summ_sent, partial_summ_sent, selection, article_sent_tokens, vocab, similarities, depth, sentence_limit, min_matched_tokens):
+def get_similar_source_sents_recursive(summ_sent, partial_summ_sent, selection, article_sent_tokens, vocab, similarities, depth, sentence_limit, min_matched_tokens):
     if sentence_limit == 1:
         if depth > 2:
             return [[]], [[]], [[]]
@@ -202,7 +187,7 @@ def get_similar_source_sents_by_lcs(summ_sent, partial_summ_sent, selection, art
         leftover_selection = [idx for idx in range(len(partial_summ_sent)) if idx not in summ_lcs_path]
         partial_summ_sent = replace_with_blanks(partial_summ_sent, leftover_selection)
 
-        sent_indices, lcs_paths, smooth_article_paths = get_similar_source_sents_by_lcs(
+        sent_indices, lcs_paths, smooth_article_paths = get_similar_source_sents_recursive(
             summ_sent, partial_summ_sent, leftover_selection, article_sent_tokens, vocab, similarities, depth+1,
             sentence_limit, min_matched_tokens)   # recursive call
 

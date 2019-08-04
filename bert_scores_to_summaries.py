@@ -60,16 +60,6 @@ else:
     exp_name = FLAGS.dataset_name + '_' + _exp_name + '_singles'
     dataset_articles = FLAGS.dataset_name + '_singles'
 
-if FLAGS.sentemb:
-    exp_name += '_sentemb'
-    bert_scores_dir += '_sentemb'
-if FLAGS.artemb:
-    exp_name += '_artemb'
-    bert_scores_dir += '_artemb'
-if FLAGS.plushidden:
-    exp_name += '_plushidden'
-    bert_scores_dir += '_plushidden'
-
 if FLAGS.upper_bound:
     exp_name = exp_name + '_upperbound'
 

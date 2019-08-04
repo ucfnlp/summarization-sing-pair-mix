@@ -4,7 +4,6 @@ import six
 import pyrouge
 import logging as log
 import os
-from absl import logging
 import sys
 from absl import flags
 FLAGS = flags.FLAGS

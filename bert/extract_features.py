@@ -33,9 +33,9 @@ flags = tf.flags
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string("input_file", None, "")
-
-flags.DEFINE_string("output_file", None, "")
+# flags.DEFINE_string("input_file", None, "")
+#
+# flags.DEFINE_string("output_file", None, "")
 
 flags.DEFINE_string("layers", "-1,-2,-3,-4", "")
 
@@ -62,7 +62,7 @@ flags.DEFINE_bool(
     "Whether to lower case the input text. Should be True for uncased "
     "models and False for cased models.")
 
-flags.DEFINE_integer("batch_size", 32, "Batch size for predictions.")
+flags.DEFINE_integer("batch_size", 1, "Batch size for predictions.")
 
 flags.DEFINE_bool("use_tpu", False, "Whether to use TPU or GPU/CPU.")
 
@@ -443,9 +443,7 @@ def main(_):
 
 
 if __name__ == "__main__":
-  # flags.mark_flag_as_required("input_file")
   flags.mark_flag_as_required("vocab_file")
   flags.mark_flag_as_required("bert_config_file")
   flags.mark_flag_as_required("init_checkpoint")
-  # flags.mark_flag_as_required("output_file")
   tf.app.run()
