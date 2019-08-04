@@ -16,9 +16,9 @@ import data
 FLAGS = flags.FLAGS
 
 if 'dataset_name' not in flags.FLAGS:
-    flags.DEFINE_string('dataset_name', 'cnn_dm', 'Which dataset to use. Can be {duc_2004, tac_2011, etc}')
+    flags.DEFINE_string('dataset_name', 'cnn_dm', 'Which dataset to use. Can be {cnn_dm, xsum, duc_2004}')
 if 'dataset_split' not in flags.FLAGS:
-    flags.DEFINE_string('dataset_split', 'all', 'Which dataset split to use. Must be one of {train, val (or dev), test}')
+    flags.DEFINE_string('dataset_split', 'all', 'Which dataset split to use. Must be one of {train, val, test, all}')
 if 'num_instances' not in flags.FLAGS:
     flags.DEFINE_integer('num_instances', -1,
                          'Number of instances to run for before stopping. Use -1 to run on all instances.')
@@ -28,7 +28,7 @@ FLAGS(sys.argv)
 # import convert_data
 # import preprocess_for_lambdamart_no_flags
 
-data_dir = os.path.expanduser('~') + '/data/tf_data/with_coref_and_ssi'
+data_dir = 'data/tf_data'
 ssi_dir = 'data/ssi'
 names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string'), ('corefs', 'json'), ('doc_indices', 'delimited_list')]
 min_matched_tokens = 1

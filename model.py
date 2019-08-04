@@ -351,11 +351,7 @@ class SummarizationModel(object):
         }
         if self._hps.coverage:
             to_return['coverage_loss'] = self._coverage_loss
-        try:
-            result = sess.run(to_return, feed_dict)
-        except:
-            a=0
-            raise
+        result = sess.run(to_return, feed_dict)
         return result
 
     def run_eval_step(self, sess, batch):

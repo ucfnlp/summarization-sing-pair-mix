@@ -11,9 +11,9 @@ import convert_data
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string('dataset_name', 'cnn_dm', 'Which dataset to use. Makes a log dir based on name.\
-                                                Must be one of {tac_2011, tac_2008, duc_2004, duc_tac, cnn_dm} or a custom dataset name')
-flags.DEFINE_string('data_root', os.path.expanduser('~') + '/data/tf_data/with_coref_and_ssi', 'Path to root directory for all datasets (already converted to TensorFlow examples).')
-flags.DEFINE_string('dataset_split', 'all', 'Which dataset split to use. Must be one of {train, val, test}')
+                                               Must be one of {cnn_dm, xsum, duc_2004}')
+flags.DEFINE_string('data_root', 'data/tf_data', 'Path to root directory for all datasets (already converted to TensorFlow examples).')
+flags.DEFINE_string('dataset_split', 'all', 'Which dataset split to use. Must be one of {train, val, test, all}')
 
 
 # names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string'), ('corefs', 'json')]

@@ -21,8 +21,8 @@ FLAGS = flags.FLAGS
 
 # Where to find data
 flags.DEFINE_string('dataset_name', 'cnn_dm', 'Which dataset to use. Makes a log dir based on name.\
-                                                Must be one of {tac_2011, tac_2008, duc_2004, duc_tac, cnn_dm} or a custom dataset name')
-flags.DEFINE_string('data_root', os.path.expanduser('~') + '/data/tf_data/with_coref_and_ssi', 'Path to root directory for all datasets (already converted to TensorFlow examples).')
+                                                Must be one of {cnn_dm, xsum, duc_2004}')
+flags.DEFINE_string('data_root', 'data/tf_data', 'Path to root directory for all datasets (already converted to TensorFlow examples).')
 flags.DEFINE_string('vocab_path', 'logs/vocab', 'Path expression to text vocabulary file.')
 flags.DEFINE_string('pretrained_path', '', 'Directory of pretrained model for PG trained on singles or pairs of sentences.')
 flags.DEFINE_boolean('use_pretrained', True, 'If True, use pretrained model in the path FLAGS.pretrained_path.')
@@ -36,7 +36,7 @@ flags.DEFINE_string('mode', 'decode', 'must be one of train/eval/decode')
 flags.DEFINE_boolean('single_pass', True, 'For decode mode only. If True, run eval on the full dataset using a fixed checkpoint, i.e. take the current checkpoint, and use it to produce one summary for each example in the dataset, write the summaries to file and then get ROUGE scores for the whole dataset. If False (default), run concurrent decoding, i.e. repeatedly load latest checkpoint, use it to produce summaries for randomly-chosen examples and log the results to screen, indefinitely.')
 flags.DEFINE_string('data_path', '', 'Path expression to tf.Example datafiles. Can include wildcards to access multiple datafiles.')
 flags.DEFINE_string('actual_log_root', '', 'Dont use this setting, only for internal use. Root directory for all logging.')
-flags.DEFINE_string('dataset_split', 'test', 'Which dataset split to use. Must be one of {train, val, test}')
+flags.DEFINE_string('dataset_split', 'test', 'Which dataset split to use. Must be one of {train, val, test, all}')
 
 # Hyperparameters
 flags.DEFINE_integer('hidden_dim', 256, 'dimension of RNN hidden states')
@@ -79,14 +79,13 @@ flags.DEFINE_boolean('attn_vis', False, 'If true, then output attention visualiz
 
 flags.DEFINE_string('singles_and_pairs', 'both',
                     'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
-flags.DEFINE_boolean('upper_bound', False, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
-flags.DEFINE_boolean('use_bert', True, 'If true, use PG trained on Websplit for testing.')
-flags.DEFINE_boolean('sentemb', True, 'Which mode to run in. Must be in {write_to_file, generate_summaries}.')
-flags.DEFINE_boolean('artemb', True, 'Which mode to run in. Must be in {write_to_file, generate_summaries}.')
-flags.DEFINE_boolean('plushidden', True, 'Which mode to run in. Must be in {write_to_file, generate_summaries}.')
-flags.DEFINE_boolean('skip_with_less_than_3', True,
-                    'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
-flags.DEFINE_boolean('by_instance', True, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
+flags.DEFINE_boolean('upper_bound', False, 'If true, then uses the groundtruth singletons/pairs.')
+flags.DEFINE_boolean('use_bert', True, 'If true, use BERT-selected sentences. This setting should always be true, since the VSM (using LambdaMART) implementation has not been included.')
+flags.DEFINE_boolean('sentemb', True, 'Adds sentence position embedding to every word in BERT.')
+flags.DEFINE_boolean('artemb', True, 'Adds arrticle embedding that is used when giving a score to a given instance in BERT.')
+flags.DEFINE_boolean('plushidden', True, 'Adds an extra hidden layer at the output layer of BERT.')
+flags.DEFINE_boolean('skip_with_less_than_3', True, 'Skips articles and abstracts with less than 3 tokens.')
+flags.DEFINE_boolean('by_instance', True, 'If true, then read in data by instance-level (sentence singleton/pair). If false, then read in as full article and summary.')
 
 
 _exp_name = 'lambdamart'
@@ -194,32 +193,6 @@ def main(unused_argv):
     model = SummarizationModel(decode_model_hps, vocab)
     decoder = BeamSearchDecoder(model, None, vocab)
     decoder.decode_iteratively(example_generator, total, names_to_types, ssi_list, hps)
-
-    # num_outside = []
-    # for example_idx, example in enumerate(tqdm(example_generator, total=total)):
-    #     raw_article_sents, groundtruth_similar_source_indices_list, groundtruth_summary_text, corefs = util.unpack_tf_example(
-    #         example, names_to_types)
-    #     article_sent_tokens = [util.process_sent(sent) for sent in raw_article_sents]
-    #     cur_token_idx = 0
-    #     for sent_idx, sent_tokens in enumerate(article_sent_tokens):
-    #         for token in sent_tokens:
-    #             cur_token_idx += 1
-    #             if cur_token_idx >= 400:
-    #                 sent_idx_at_400 = sent_idx
-    #                 break
-    #         if cur_token_idx >= 400:
-    #             break
-    #
-    #     my_num_outside = 0
-    #     for ssi in groundtruth_similar_source_indices_list:
-    #         for source_idx in ssi:
-    #             if source_idx >= sent_idx_at_400:
-    #                 my_num_outside += 1
-    #     num_outside.append(my_num_outside)
-    # print "num_outside = %d" % np.mean(num_outside)
-
-
-    a=0
 
 if __name__ == '__main__':
     app.run(main)

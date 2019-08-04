@@ -11,7 +11,7 @@ try:
     reload(sys)
     sys.setdefaultencoding('utf8')
 except:
-    a=0
+    _=None
 import tempfile
 tempfile.tempdir = "tmp"
 if not os.path.exists(tempfile.tempdir):

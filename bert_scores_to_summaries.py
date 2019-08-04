@@ -23,7 +23,7 @@ FLAGS = flags.FLAGS
 if 'singles_and_pairs' not in flags.FLAGS:
     flags.DEFINE_string('singles_and_pairs', 'both', 'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
 if 'dataset_name' not in flags.FLAGS:
-    flags.DEFINE_string('dataset_name', 'cnn_dm', '')
+    flags.DEFINE_string('dataset_name', 'cnn_dm', 'Which dataset to use. Can be {cnn_dm, xsum, duc_2004}')
 if 'upper_bound' not in flags.FLAGS:
     flags.DEFINE_boolean('upper_bound', False, 'If true, then uses the groundtruth singletons/pairs.')
 if 'num_instances' not in flags.FLAGS:
@@ -34,7 +34,6 @@ if 'artemb' not in flags.FLAGS:
     flags.DEFINE_boolean('artemb', True, 'Adds arrticle embedding that is used when giving a score to a given instance in BERT.')
 if 'plushidden' not in flags.FLAGS:
     flags.DEFINE_boolean('plushidden', True, 'Adds an extra hidden layer at the output layer of BERT.')
-# flags.DEFINE_boolean('l_sents', True, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
 
 if not flags_already_done:
     FLAGS(sys.argv)
@@ -46,7 +45,7 @@ random_seed = 123
 max_sent_len_feat = 20
 min_matched_tokens = 2
 
-data_dir = os.path.expanduser('~') + '/data/tf_data/with_coref_and_ssi'
+data_dir = 'data/tf_data'
 bert_in_dir = os.path.join('data', 'bert', FLAGS.dataset_name, FLAGS.singles_and_pairs, 'input')
 bert_scores_dir = os.path.join('data', 'bert', FLAGS.dataset_name, FLAGS.singles_and_pairs, 'output')
 ssi_out_dir = 'data/temp/' + FLAGS.dataset_name + '/ssi'

@@ -42,8 +42,8 @@ original_pretrained_path = {'cnn_dm': 'logs/pretrained_model_tf1.2.1',
 
 # Where to find data
 flags.DEFINE_string('dataset_name', 'cnn_dm', 'Which dataset to use. Makes a log dir based on name.\
-                                                Must be one of {tac_2011, tac_2008, duc_2004, duc_tac, cnn_dm} or a custom dataset name')
-flags.DEFINE_string('data_root', os.path.expanduser('~') + '/data/tf_data/with_coref_and_ssi', 'Path to root directory for all datasets (already converted to TensorFlow examples).')
+                                                Must be one of {cnn_dm, xsum, duc_2004}')
+flags.DEFINE_string('data_root', 'data/tf_data', 'Path to root directory for all datasets (already converted to TensorFlow examples).')
 flags.DEFINE_string('vocab_path', 'logs/vocab', 'Path expression to text vocabulary file.')
 flags.DEFINE_string('pretrained_path', original_pretrained_path['cnn_dm'], 'Directory of pretrained model from See et al.')
 flags.DEFINE_boolean('use_pretrained', False, 'If True, use pretrained model in the path FLAGS.pretrained_path.')
@@ -58,7 +58,7 @@ flags.DEFINE_string('mode', 'decode', 'must be one of train/eval/decode')
 flags.DEFINE_boolean('single_pass', True, 'For decode mode only. If True, run eval on the full dataset using a fixed checkpoint, i.e. take the current checkpoint, and use it to produce one summary for each example in the dataset, write the summaries to file and then get ROUGE scores for the whole dataset. If False (default), run concurrent decoding, i.e. repeatedly load latest checkpoint, use it to produce summaries for randomly-chosen examples and log the results to screen, indefinitely.')
 flags.DEFINE_string('data_path', '', 'Path expression to tf.Example datafiles. Can include wildcards to access multiple datafiles.')
 flags.DEFINE_string('actual_log_root', '', 'Dont use this setting, only for internal use. Root directory for all logging.')
-flags.DEFINE_string('dataset_split', 'test', 'Which dataset split to use. Must be one of {train, val, test}')
+flags.DEFINE_string('dataset_split', 'test', 'Which dataset split to use. Must be one of {train, val, test, all}')
 
 # Hyperparameters
 flags.DEFINE_integer('hidden_dim', 256, 'dimension of RNN hidden states')
@@ -91,18 +91,15 @@ flags.DEFINE_boolean('debug', False, "Run in tensorflow's debug mode (watches fo
 flags.DEFINE_boolean('attn_vis', False, 'If true, then output attention visualization during decoding.')
 
 # SingPairMix settings
-flags.DEFINE_integer('num_iterations', 60000, 'How many iterations to run. Set to -1 to run indefinitely.')
+flags.DEFINE_integer('num_iterations', -1, 'How many iterations to run. Set to -1 to run indefinitely.')
 flags.DEFINE_string('singles_and_pairs', 'both',
                     'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
-flags.DEFINE_boolean('skip_with_less_than_3', True,
-                    'Skips articles and abstracts with less than 3 tokens.')
-# flags.DEFINE_boolean('l_sents', True, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
-flags.DEFINE_boolean('by_instance', True, 'If true, save plots of each distribution -- importance, similarity, mmr. This setting makes decoding take much longer.')
+flags.DEFINE_boolean('skip_with_less_than_3', True, 'Skips articles and abstracts with less than 3 tokens.')
+flags.DEFINE_boolean('by_instance', True, 'If true, then read in data by instance-level (sentence singleton/pair). If false, then read in as full article and summary.')
 
-
-flags.DEFINE_bool("sentemb", True, "Whether to lower case the input text. Should be True for uncased models and False for cased models.")
-flags.DEFINE_bool("artemb", True, "Whether to use TPU or GPU/CPU.")
-flags.DEFINE_bool("plushidden", True, "Whether to use TPU or GPU/CPU.")
+flags.DEFINE_bool("sentemb", True, 'Adds sentence position embedding to every word in BERT.')
+flags.DEFINE_bool("artemb", True, 'Adds arrticle embedding that is used when giving a score to a given instance in BERT.')
+flags.DEFINE_bool("plushidden", True, 'Adds an extra hidden layer at the output layer of BERT.')
 
 
 def calc_running_avg_loss(loss, running_avg_loss, summary_writer, step, decay=0.99):

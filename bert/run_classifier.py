@@ -136,24 +136,17 @@ flags.DEFINE_integer(
     "num_tpu_cores", 8,
     "Only used if `use_tpu` is True. Total number of TPU cores to use.")
 
-
-flags.DEFINE_bool(
-    "sentemb", True,
-    "Whether to lower case the input text. Should be True for uncased "
-    "models and False for cased models.")
-
-flags.DEFINE_bool("artemb", True, "Whether to use TPU or GPU/CPU.")
-
+''' SingPairMix settings '''
+flags.DEFINE_bool("sentemb", True, 'Adds sentence position embedding to every word in BERT.')
+flags.DEFINE_bool("artemb", True, 'Adds arrticle embedding that is used when giving a score to a given instance in BERT.')
+flags.DEFINE_bool("plushidden", True, 'Adds an extra hidden layer at the output layer of BERT.')
 flags.DEFINE_string(
     "model_dir", None,
     "The output directory where the model checkpoints will be written.")
-
 if 'singles_and_pairs' not in flags.FLAGS:
     flags.DEFINE_string('singles_and_pairs', 'both', 'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
 if 'dataset_name' not in flags.FLAGS:
-    flags.DEFINE_string('dataset_name', 'cnn_dm', 'Whether to run with only single sentences or with both singles and pairs. Must be in {singles, both}.')
-
-flags.DEFINE_bool("plushidden", True, "Whether to use TPU or GPU/CPU.")
+    flags.DEFINE_string('dataset_name', 'cnn_dm', 'Which dataset to use. Can be {cnn_dm, xsum, duc_2004}')
 
 
 class InputExample(object):

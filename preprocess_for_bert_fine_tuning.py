@@ -13,9 +13,9 @@ import ssi_functions
 FLAGS = flags.FLAGS
 
 if 'dataset_name' not in flags.FLAGS:
-    flags.DEFINE_string('dataset_name', 'cnn_dm', 'Which dataset to use. Can be {duc_2004, tac_2011, etc}')
+    flags.DEFINE_string('dataset_name', 'cnn_dm', 'Which dataset to use. Can be {cnn_dm, xsum, duc_2004}')
 if 'dataset_split' not in flags.FLAGS:
-    flags.DEFINE_string('dataset_split', 'all', 'Which dataset split to use. Must be one of {train, val (or dev), test}')
+    flags.DEFINE_string('dataset_split', 'all', 'Which dataset split to use. Must be one of {train, val, test, all}')
 if 'sentence_limit' not in flags.FLAGS:
     flags.DEFINE_integer('sentence_limit', 2, 'Max number of sentences to include for merging.')
 if 'singles_and_pairs' not in flags.FLAGS:
@@ -28,7 +28,7 @@ FLAGS(sys.argv)
 
 from ssi_functions import filter_pairs_by_sent_position
 
-data_dir = os.path.expanduser('~') + '/data/tf_data/with_coref_and_ssi'
+data_dir = 'data/tf_data'
 ssi_dir = 'data/ssi'
 names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string'), ('corefs', 'json'),
                   ('doc_indices', 'delimited_list')]

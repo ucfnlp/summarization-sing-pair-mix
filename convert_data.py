@@ -4,14 +4,10 @@
 Script to convert multi-document inputs to TensorFlow examples which can be sent to the PG-MMR model.
 """
 
-import glob
 import struct
-import shutil
 from tensorflow.core.example import example_pb2
 import nltk
 import os
-from bs4 import BeautifulSoup
-import io
 from absl import flags
 from absl import app
 from tqdm import tqdm
@@ -22,7 +18,7 @@ try:
     reload(sys)
     sys.setdefaultencoding('utf8')
 except:
-    a=0
+    _=None
 
 FLAGS = flags.FLAGS
 
@@ -61,8 +57,6 @@ def convert_singpairmix_to_tf_examples(dataset_name, processed_data_dir, tf_exam
             if doc_indices is None or (dataset_name != 'duc_2004' and len(doc_indices) != len(
                     util.flatten_list_of_lists(article_sent_tokens))):
                 doc_indices = [0] * len(util.flatten_list_of_lists(article_sent_tokens))
-            doc_indices = [int(doc_idx) for doc_idx in doc_indices]
-            summary_sent_tokens = [util.process_sent(sent, whitespace=True) for sent in groundtruth_summ_sents]
             similar_source_indices = [source_indices.split(',') for source_indices in f_hl.readline().split('\t')]
 
             write_bert_tf_example(similar_source_indices, raw_article_sents, summary_text, None,
@@ -171,7 +165,7 @@ def main(unused_argv):
 
 if __name__ == '__main__':
     flags.DEFINE_string('dataset_name', 'cnn_dm', 'Which dataset to convert from raw data to tf examples')
-    flags.DEFINE_string('dataset_split', 'all', 'Which dataset to convert from raw data to tf examples')
+    flags.DEFINE_string('dataset_split', 'all', 'Which dataset split to use. Must be one of {train, val, test, all}')
     flags.DEFINE_string('line_by_line_data_path', 'data/processed', 'Where the data is, to be converted to TF examples.')
     flags.DEFINE_string('out_data_path', 'data/tf_data', 'Where to put output tf examples')
     app.run(main)

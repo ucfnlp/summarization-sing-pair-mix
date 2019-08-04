@@ -14,17 +14,11 @@ SENTENCE_START = '<s>'
 SENTENCE_END = '</s>'
 out_dir = os.path.join('data/processed/cnn_dm')
 
-# all_train_urls = "data/cnn_dm_unprocessed/url_lists/all_train.txt"
-# all_val_urls = "data/cnn_dm_unprocessed/url_lists/all_val.txt"
-# all_test_urls = "data/cnn_dm_unprocessed/url_lists/all_test.txt"
-# cnn_tokenized_stories_dir = 'data/cnn_dm_unprocessed/cnn_stories_tokenized'
-# dm_tokenized_stories_dir = 'data/cnn_dm_unprocessed/dm_stories_tokenized'
-
-all_train_urls = "/home/logan/data/url_lists/all_train.txt"
-all_val_urls = "/home/logan/data/url_lists/all_val.txt"
-all_test_urls = "/home/logan/data/url_lists/all_test.txt"
-cnn_tokenized_stories_dir = '/home/logan/data/cnn_stories_tokenized'
-dm_tokenized_stories_dir = '/home/logan/data/dm_stories_tokenized'
+all_train_urls = "data/cnn_dm_unprocessed/url_lists/all_train.txt"
+all_val_urls = "data/cnn_dm_unprocessed/url_lists/all_val.txt"
+all_test_urls = "data/cnn_dm_unprocessed/url_lists/all_test.txt"
+cnn_tokenized_stories_dir = 'data/cnn_dm_unprocessed/cnn_stories_tokenized'
+dm_tokenized_stories_dir = 'data/cnn_dm_unprocessed/dm_stories_tokenized'
 
 
 # These are the number of .story files we expect there to be in cnn_stories_dir and dm_stories_dir

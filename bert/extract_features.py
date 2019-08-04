@@ -79,13 +79,12 @@ flags.DEFINE_bool(
     "tf.nn.embedding_lookup will be used. On TPUs, this should be True "
     "since it is much faster.")
 
+''' SingPairMix settings '''
 flags.DEFINE_bool(
     "only_class_embedding", True,
     "If True, only save the [CLS] embedding to the output jsonl file.")
-
 flags.DEFINE_string("dataset_name", 'cnn_dm',
                     "If using a TPU, the address of the master.")
-
 flags.DEFINE_string("dataset_split", 'all',
                     "If using a TPU, the address of the master.")
 

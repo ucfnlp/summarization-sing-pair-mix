@@ -265,21 +265,12 @@ def remove_stopwords(sent):
     return new_sent
 
 def remove_stopwords_punctuation(sent):
-    try:
-        new_sent = [token for token in sent if not is_stopword_punctuation(token)]
-    except:
-        a=0
+    new_sent = [token for token in sent if not is_stopword_punctuation(token)]
     return new_sent
 '''
 Functions for computing sentence similarity between a set of source sentences and a set of summary sentences
 
 '''
-def get_similarity(enc_tokens, summ_tokens, vocab):
-    metric = 'precision'
-    summ_tokens_combined = flatten_list_of_lists(summ_tokens)
-    importances_hat = rouge_l_similarity(enc_tokens, summ_tokens_combined, vocab, metric=metric)
-    return importances_hat
-
 def rouge_l_similarity(article_sents, abstract_sents, vocab, metric='f1'):
     sentence_similarity = np.zeros([len(article_sents)], dtype=float)
     abstract_sents_removed_periods = remove_period_ids(abstract_sents, vocab)
@@ -317,7 +308,6 @@ def rouge_2_similarity_matrix(article_sents, abstract_sents, vocab, metric, shou
         article_sents = [remove_stopwords_punctuation(sent) for sent in article_sents]
         abstract_sents = [remove_stopwords_punctuation(sent) for sent in abstract_sents]
     sentence_similarity_matrix = np.zeros([len(article_sents), len(abstract_sents)], dtype=float)
-    # abstract_sents_removed_periods = remove_period_ids(abstract_sents, vocab)
     for article_sent_idx, article_sent in enumerate(article_sents):
         abs_similarities = []
         for abstract_sent_idx, abstract_sent in enumerate(abstract_sents):
@@ -326,27 +316,6 @@ def rouge_2_similarity_matrix(article_sents, abstract_sents, vocab, metric, shou
             sentence_similarity_matrix[article_sent_idx, abstract_sent_idx] = rouge
     return sentence_similarity_matrix
 
-def write_to_temp_files(string_list, temp_dir):
-    file_paths = []
-    for s_idx, s in enumerate(string_list):
-        file_path = os.path.join(temp_dir, '%06d.txt' % s_idx)
-        file_paths.append(file_path)
-        with open(file_path, 'wb') as f:
-            f.write(s)
-    return file_paths
-
-
-def get_doc_substituted_tfidf_matrix(tfidf_vectorizer, sentences, article_text):
-
-    sent_term_matrix = tfidf_transform(tfidf_vectorizer, sentences)
-
-    doc_vec = tfidf_transform(tfidf_vectorizer, [article_text])
-    nonzero_rows, nonzero_cols = sent_term_matrix.nonzero()
-    nonzero_indices = list(zip(nonzero_rows, nonzero_cols))
-    for idx in nonzero_indices:
-        val = doc_vec[0, idx[1]]
-        sent_term_matrix[idx] = val
-    return sent_term_matrix
 
 def chunk_file(set_name, out_full_dir, out_dir, chunk_size=1000):
   in_file = os.path.join(out_full_dir, '%s.bin' % set_name)
@@ -441,14 +410,6 @@ def unpack_tf_example(example, names_to_types):
         res.append(func[type](name))
     return res
 
-# def get_tfidf_importances(raw_article_sents, tfidf_model_path=None):
-def get_tfidf_importances(tfidf_vectorizer, raw_article_sents):
-    article_text = ' '.join(raw_article_sents)
-    sent_reps = get_doc_substituted_tfidf_matrix(tfidf_vectorizer, raw_article_sents, article_text)
-    cluster_rep = np.mean(sent_reps, axis=0).reshape(1, -1)
-    similarity_matrix = cosine_similarity(sent_reps, cluster_rep)
-    return np.squeeze(similarity_matrix, 1)
-
 def singles_to_singles_pairs(distribution):
     possible_pairs = [tuple(x) for x in
                       list(itertools.combinations(list(range(len(distribution))), 2))]  # all pairs
@@ -470,11 +431,7 @@ def combine_sim_and_imp(similarity, importances, lambda_val=0.6):
 def combine_sim_and_imp_dict(similarities_dict, importances_dict, lambda_val=0.6):
     mmr = {}
     for key in list(importances_dict.keys()):
-        try:
-            mmr[key] = combine_sim_and_imp(similarities_dict[key], importances_dict[key], lambda_val=lambda_val)
-        except:
-            a=0
-            raise
+        mmr[key] = combine_sim_and_imp(similarities_dict[key], importances_dict[key], lambda_val=lambda_val)
     return mmr
 
 # @profile
@@ -517,22 +474,6 @@ def print_execution_time(start_time):
     else:
         print(('Execution time: ', time_taken/3600., ' hr'))
 
-def split_list_by_item(lst, item):
-    return [list(y) for x, y in itertools.groupby(lst, lambda z: z == item) if not x]
-
-def show_callers_locals():
-    """Print the local variables in the caller's frame."""
-    callers_local_vars = list(inspect.currentframe().f_back.f_back.f_back.f_locals.items())
-    return callers_local_vars
-
-def varname(my_var):
-    callers_locals = show_callers_locals()
-    return [var_name for var_name, var_val in callers_locals if var_val is my_var]
-
-def print_vars(*args):
-    for v in args:
-        print(varname(v), v)
-
 def reorder(l, ordering):
     return [l[i] for i in ordering]
 
@@ -556,11 +497,7 @@ def reshape_like(to_reshape, thing_with_shape):
         list_to_add = []
         for _ in lst:
 
-            try:
-                list_to_add.append(to_reshape[idx])
-            except:
-                a=0
-                raise
+            list_to_add.append(to_reshape[idx])
             idx += 1
         res.append(list_to_add)
     return res
@@ -569,33 +506,6 @@ def enforce_sentence_limit(groundtruth_similar_source_indices_list, sentence_lim
     enforced_groundtruth_ssi_list = [ssi[:sentence_limit] for ssi in groundtruth_similar_source_indices_list]
     return enforced_groundtruth_ssi_list
 
-def hist_as_pdf_str(hist):
-    vals, bins = hist
-    length = np.sum(vals)
-    pdf = vals * 100.0 / length
-    return '%.2f\t'*len(pdf) % tuple(pdf.tolist())
-
-def find_largest_ckpt_folder(my_dir):
-    folder_names = os.listdir(my_dir)
-    folder_ckpt_nums = []
-    for folder_name in folder_names:
-        if '-' not in folder_name:
-            ckpt_num = -1
-        else:
-            ckpt_num = int(folder_name.split('-')[-1].split('_')[0])
-        folder_ckpt_nums.append(ckpt_num)
-    max_idx = np.argmax(folder_ckpt_nums)
-    return folder_names[max_idx]
-
-def nCr(n,r):
-    f = math.factorial
-    return f(n) / f(r) / f(n-r)
-
-def tfidf_transform(tfidf_vectorizer, texts):
-    matrix = tfidf_vectorizer.transform(texts)
-    return matrix
-
-# @profile
 def get_first_available_sent(enforced_groundtruth_ssi_list, raw_article_sents, replaced_ssi_list):
     flat_ssi_list = flatten_list_of_lists(enforced_groundtruth_ssi_list + replaced_ssi_list)
     if FLAGS.dataset_name == 'xsum':
@@ -619,7 +529,7 @@ def replace_empty_ssis(enforced_groundtruth_ssi_list, raw_article_sents, sys_alp
                 alp = [list(range(len(raw_article_sents[chosen_sent].split(' '))))]
                 replaced_alp_list.append(alp)
             else:
-                a=0     # Don't add the summary sentence because all the source sentences are used up
+                _=None     # Don't add the summary sentence because all the source sentences are used up
         else:
             replaced_ssi_list.append(ssi)
             replaced_alp_list.append(sys_alp_list[ssi_idx])
@@ -673,11 +583,7 @@ def all_sent_selection_eval(ssi_list):
         return flatten_list_of_lists(gt)
     def primary(gt):
         if chronological_ssi:
-            try:
-                return [min(ssi) for ssi in gt if len(ssi) > 0]
-            except:
-                print_vars(gt)
-                raise
+            return [min(ssi) for ssi in gt if len(ssi) > 0]
         else:
             return flatten_list_of_lists(enforce_sentence_limit(gt, 1))
     def secondary(gt):
@@ -685,10 +591,6 @@ def all_sent_selection_eval(ssi_list):
             return [max(ssi) for ssi in gt if len(ssi) == 2]
         else:
             return [ssi[1] for ssi in gt if len(ssi) == 2]
-    # def single(gt):
-    #     return util.flatten_list_of_lists([ssi for ssi in gt if len(ssi) == 1])
-    # def pair(gt):
-    #     return util.flatten_list_of_lists([ssi for ssi in gt if len(ssi) == 2])
     operations_on_gt = [flatten, primary, secondary]
     suffixes = []
     for op in operations_on_gt:
@@ -702,12 +604,6 @@ def lemmatize_sent_tokens(article_sent_tokens):
     article_sent_tokens_lemma = [[t.lemma_ for t in Doc(nlp.vocab, words=[token for token in sent])] for sent in article_sent_tokens]
     return article_sent_tokens_lemma
 
-average_sents_for_dataset = {
-    'cnn_dm': 4,
-    'xsum': 1,
-    'duc_2004': 5
-}
-
 def fix_bracket_token(token):
     if token == '(':
         return '-lrb-'
@@ -720,20 +616,7 @@ def fix_bracket_token(token):
     else:
         return token
 
-def unfix_bracket_tokens_in_sent(sent):
-    return sent.replace('-lrb-', '(').replace('-rrb-', ')').replace('-lsb-', '[').replace('-rsb-', ']').replace('-LRB-', '(').replace('-RRB-', ')').replace('-LSB-', '[').replace('-RSB-', ']')
-
-def is_quote(tokens):
-    contains_quotation_marks = "''" in tokens and len(tokens) > 0 and tokens[0] == "``"
-    doesnt_end_with_period = len(tokens) > 0 and tokens[-1] != "."
-    # contains_says = "says" in tokens or "said" in tokens
-    decision = contains_quotation_marks or doesnt_end_with_period
-    # if decision:
-    #     print "Skipping quote: ", ' '.join(tokens)
-    return decision
-
 def process_sent(sent, whitespace=False):
-    # line = decode_text(sent.lower())
     line = sent.lower()
     if whitespace:
         tokenized_sent = line.split()
