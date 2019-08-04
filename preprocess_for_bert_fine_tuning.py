@@ -30,7 +30,7 @@ from ssi_functions import filter_pairs_by_sent_position
 
 data_dir = 'data/tf_data'
 ssi_dir = 'data/ssi'
-names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string'), ('corefs', 'json'),
+names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string'),
                   ('doc_indices', 'delimited_list')]
 min_matched_tokens = 1
 np.random.seed(123)
@@ -106,7 +106,7 @@ def main(unused_argv):
             writer.write(('\t'.join(header_list) + '\n').encode())
             inst_id = 0
             for example_idx, example in enumerate(tqdm(example_generator, total=total)):
-                raw_article_sents, groundtruth_similar_source_indices_list, groundtruth_summary_text, corefs, doc_indices = util.unpack_tf_example(
+                raw_article_sents, groundtruth_similar_source_indices_list, groundtruth_summary_text, doc_indices = util.unpack_tf_example(
                     example, names_to_types)
                 article_sent_tokens = [util.process_sent(sent) for sent in raw_article_sents]
                 groundtruth_summ_sents = [[sent.strip() for sent in groundtruth_summary_text.strip().split('\n')]]

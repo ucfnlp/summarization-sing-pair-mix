@@ -57,10 +57,11 @@ def convert_singpairmix_to_tf_examples(dataset_name, processed_data_dir, tf_exam
             if doc_indices is None or (dataset_name != 'duc_2004' and len(doc_indices) != len(
                     util.flatten_list_of_lists(article_sent_tokens))):
                 doc_indices = [0] * len(util.flatten_list_of_lists(article_sent_tokens))
+            doc_indices_str = ' '.join([str(idx) for idx in doc_indices])
             similar_source_indices = [source_indices.split(',') for source_indices in f_hl.readline().split('\t')]
 
             write_bert_tf_example(similar_source_indices, raw_article_sents, summary_text, None,
-                                     None, None, writer, dataset_name)
+                                  doc_indices_str, None, writer, dataset_name)
 
         writer.close()
         if dataset_name == 'cnn_dm' or dataset_name == 'newsroom' or dataset_name == 'xsum':

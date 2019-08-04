@@ -116,9 +116,9 @@ def is_valid_example(e, is_original=True):
     raw_article_sents = []
     if not is_original:
         try:
-            names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string'), ('corefs', 'json')]
+            names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string')]
 
-            raw_article_sents, ssi, groundtruth_summary_text, corefs = util.unpack_tf_example(
+            raw_article_sents, ssi, groundtruth_summary_text = util.unpack_tf_example(
                 e, names_to_types)
             if len(raw_article_sents) == 0:
                 return False

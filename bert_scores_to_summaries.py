@@ -50,7 +50,7 @@ bert_in_dir = os.path.join('data', 'bert', FLAGS.dataset_name, FLAGS.singles_and
 bert_scores_dir = os.path.join('data', 'bert', FLAGS.dataset_name, FLAGS.singles_and_pairs, 'output')
 ssi_out_dir = 'data/temp/' + FLAGS.dataset_name + '/ssi'
 log_dir = 'logs'
-names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string'), ('corefs', 'json'), ('doc_indices', 'delimited_list')]
+names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string'), ('doc_indices', 'delimited_list')]
 
 if FLAGS.singles_and_pairs == 'both':
     exp_name = FLAGS.dataset_name + '_' + _exp_name + '_both'
@@ -191,7 +191,7 @@ def evaluate_example(ex):
     print(example_idx)
 
     # Read example from dataset
-    raw_article_sents, groundtruth_similar_source_indices_list, groundtruth_summary_text, corefs, doc_indices = util.unpack_tf_example(example, names_to_types)
+    raw_article_sents, groundtruth_similar_source_indices_list, groundtruth_summary_text, doc_indices = util.unpack_tf_example(example, names_to_types)
     article_sent_tokens = [util.process_sent(sent) for sent in raw_article_sents]
     enforced_groundtruth_ssi_list = util.enforce_sentence_limit(groundtruth_similar_source_indices_list, sentence_limit)
     groundtruth_summ_sents = [[sent.strip() for sent in groundtruth_summary_text.strip().split('\n')]]
@@ -209,7 +209,7 @@ def evaluate_example(ex):
         summary_sents, similar_source_indices_list, summary_sents_for_html, ssi_length_extractive = generate_summary(article_sent_tokens, qid_ssi_to_importances, example_idx)
         similar_source_indices_list_trunc = similar_source_indices_list[:ssi_length_extractive]
         summary_sents_for_html_trunc = summary_sents_for_html[:ssi_length_extractive]
-        if example_idx <= 100:
+        if example_idx <= 1:
             summary_sent_tokens = [sent.split(' ') for sent in summary_sents_for_html_trunc]
             extracted_sents_in_article_html = html_highlight_sents_in_article(summary_sent_tokens, similar_source_indices_list_trunc,
                                             article_sent_tokens, doc_indices=doc_indices)
@@ -249,12 +249,13 @@ def main(unused_argv):
     print('Creating list')
     ex_list = [ex for ex in ex_gen]
 
-    # Main function to get results on all test examples
-    pool = mp.Pool(mp.cpu_count())
-    ssi_list = pool.map(evaluate_example, ex_list)
-    pool.close()
+    # # Main function to get results on all test examples
+    # pool = mp.Pool(mp.cpu_count())
+    # ssi_list = list(tqdm(pool.imap(evaluate_example, ex_list), total=total))
+    # pool.close()
 
-    # ssi_list = list(map(evaluate_example, ex_list))
+    # Main function to get results on all test examples
+    ssi_list = list(map(evaluate_example, ex_list))
 
     # save ssi_list
     with open(os.path.join(my_log_dir, 'ssi.pkl'), 'wb') as f:

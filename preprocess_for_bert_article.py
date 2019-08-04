@@ -30,7 +30,7 @@ FLAGS(sys.argv)
 
 data_dir = 'data/tf_data'
 ssi_dir = 'data/ssi'
-names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string'), ('corefs', 'json'), ('doc_indices', 'delimited_list')]
+names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string'), ('doc_indices', 'delimited_list')]
 min_matched_tokens = 1
 np.random.seed(123)
 
@@ -79,7 +79,7 @@ def main(unused_argv):
             for example_idx, example in enumerate(tqdm(example_generator, total=total)):
                 if FLAGS.num_instances != -1 and example_idx >= FLAGS.num_instances:
                     break
-                raw_article_sents, groundtruth_similar_source_indices_list, groundtruth_summary_text, corefs, doc_indices = util.unpack_tf_example(
+                raw_article_sents, groundtruth_similar_source_indices_list, groundtruth_summary_text, doc_indices = util.unpack_tf_example(
                     example, names_to_types)
 
                 article = ' '.join(raw_article_sents)

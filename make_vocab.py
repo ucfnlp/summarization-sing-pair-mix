@@ -16,7 +16,6 @@ flags.DEFINE_string('data_root', 'data/tf_data', 'Path to root directory for all
 flags.DEFINE_string('dataset_split', 'all', 'Which dataset split to use. Must be one of {train, val, test, all}')
 
 
-# names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string'), ('corefs', 'json')]
 names_to_types = [('raw_article_sents', 'string_list'), ('article', 'string'), ('abstract', 'string_list'), ('doc_indices', 'string')]
 VOCAB_SIZE = 200000
 
@@ -42,8 +41,6 @@ def main(unused_argv):
 
         for example_idx, example in enumerate(tqdm(example_generator, total=total)):
 
-            # raw_article_sents, groundtruth_similar_source_indices_list, groundtruth_summary_text, corefs = util.unpack_tf_example(
-            #     example, names_to_types)
             raw_article_sents, article, abstracts, doc_indices = util.unpack_tf_example(
                 example, names_to_types)
             article_sent_tokens = [util.process_sent(sent) for sent in raw_article_sents]

@@ -133,7 +133,7 @@ class BeamSearchDecoder(object):
 
     def decode_iteratively(self, example_generator, total, names_to_types, ssi_list, hps):
         for example_idx, example in enumerate(tqdm(example_generator, total=total)):
-            raw_article_sents, groundtruth_similar_source_indices_list, groundtruth_summary_text, corefs = util.unpack_tf_example(
+            raw_article_sents, groundtruth_similar_source_indices_list, groundtruth_summary_text = util.unpack_tf_example(
                 example, names_to_types)
             article_sent_tokens = [util.process_sent(sent) for sent in raw_article_sents]
             groundtruth_summ_sents = [[sent.strip() for sent in groundtruth_summary_text.strip().split('\n')]]

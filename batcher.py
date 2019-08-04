@@ -497,13 +497,11 @@ class Batcher(object):
         while True:
             e = next(example_generator) # e is a tf.Example
             try:
-                names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string_list'), ('corefs', 'json')]
+                names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string_list')]
                 if self._hps.dataset_name == 'duc_2004':
                     names_to_types[2] = ('summary_text', 'string_list')
 
-                # raw_article_sents, ssi, groundtruth_summary_text, corefs, article_lcs_paths_list = util.unpack_tf_example(
-                #     e, names_to_types)
-                raw_article_sents, ssi, groundtruth_summary_sents, corefs = util.unpack_tf_example(
+                raw_article_sents, ssi, groundtruth_summary_sents = util.unpack_tf_example(
                     e, names_to_types)
                 groundtruth_summary_text = '\n'.join(groundtruth_summary_sents)
                 article_sent_tokens = [util.process_sent(sent) for sent in raw_article_sents]

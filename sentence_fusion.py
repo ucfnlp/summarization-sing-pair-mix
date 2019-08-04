@@ -102,7 +102,7 @@ lambdamart_in_dir = 'data/temp/to_lambdamart'
 lambdamart_out_dir = 'data/temp/lambdamart_results'
 ssi_out_dir = 'data/temp/ssi'
 log_dir = 'logs'
-names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string'), ('corefs', 'json')]
+names_to_types = [('raw_article_sents', 'string_list'), ('similar_source_indices', 'delimited_list_of_tuples'), ('summary_text', 'string')]
 
 
 def main(unused_argv):
