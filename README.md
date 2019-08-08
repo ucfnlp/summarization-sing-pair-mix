@@ -58,6 +58,7 @@ For CNN/DailyMail:
 Content Selection model (corresponds to BERT-Extr): https://drive.google.com/open?id=16sDOQWBxnIcvLTzv_HZEf9IBt6xqfrdL
 
 Sentence Fusion model: https://drive.google.com/open?id=1BMcfyFnwJfmjO1Uv-iWdNatjtp1aOJvf
+(The sentence fusion model reads from a file `logs/cnn_dm_bert_both/ssi.pkl` which contains the sentence singletons/pairs that were chosen by the content selection model.)
 
 # How to run the code
 

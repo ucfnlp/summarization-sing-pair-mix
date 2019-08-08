@@ -1,0 +1,1 @@
+## Sentence Fusion model (`cnn_dm_both/`) goes here. The sentence fusion model reads from a file `logs/cnn_dm_bert_both/ssi.pkl` which contains the sentence singletons/pairs that were chosen by the content selection model.

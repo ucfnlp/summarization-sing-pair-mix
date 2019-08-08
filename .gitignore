@@ -7,4 +7,5 @@ hidden/
 stuff/
 src/
 tf_data_merge_indices/
-data/
+data/cnn_dm_unprocessed/
+data/temp/
