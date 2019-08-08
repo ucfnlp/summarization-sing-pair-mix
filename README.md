@@ -82,7 +82,9 @@ Sentence Fusion model: https://drive.google.com/open?id=1BMcfyFnwJfmjO1Uv-iWdNat
 
 ### Training content selection model
 
-Train the BERT model to predict whether a given sentence singleton/pair is likely to create a summary sentence or not.
+1) Download the pre-trained BERT-Base Uncased model from (https://storage.googleapis.com/bert_models/2018_10_18/uncased_L-12_H-768_A-12.zip), unzip, and place in the `pretrained_bert_model/` directory.
+
+2) Train the BERT model to predict whether a given sentence singleton/pair is likely to create a summary sentence or not.
 
     cd bert/
     python run_classifier.py --task_name=merge --do_train --do_eval --dataset_name=cnn_dm --num_train_epochs=1000.0
