@@ -13,7 +13,9 @@ Our data is derived from existing summarization datasets: CNN/Daily Mail, XSum, 
 
 # Generating the data
 
-To generate the data (currently, we only provide CNN/Daily Mail), follow the following steps:
+We provide instructions on generating the data for CNN/DailyMail. Email the authors at loganlebanoff@knights.ucf.edu if you are interested in our data for XSum and DUC-04.
+
+To generate the CNN/DailyMail data, follow the following steps:
 
 1) Download the zip files from https://github.com/JafferWilson/Process-Data-of-CNN-DailyMail. Unzip and place `cnn_stories_tokenized/`, `dm_stories_tokenized/`, and `url_lists/` (this folder is inside the `FINISHED_FILES` zip file in JafferWilson's link) inside the `./data/cnn_dm_unprocessed/` directory.
 2) Run the following command to extract the articles and summaries from the CNN/DailyMail data. This will create the `articles.tsv` and `summaries.tsv` files.
