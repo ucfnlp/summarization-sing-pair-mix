@@ -108,7 +108,7 @@ def main(unused_argv):
             for example_idx, example in enumerate(tqdm(example_generator, total=total)):
                 raw_article_sents, groundtruth_similar_source_indices_list, groundtruth_summary_text, doc_indices = util.unpack_tf_example(
                     example, names_to_types)
-                article_sent_tokens = [util.process_sent(sent) for sent in raw_article_sents]
+                article_sent_tokens = [util.process_sent(sent, whitespace=True) for sent in raw_article_sents]
                 groundtruth_summ_sents = [[sent.strip() for sent in groundtruth_summary_text.strip().split('\n')]]
                 if doc_indices is None or (dataset_name != 'duc_2004' and len(doc_indices) != len(util.flatten_list_of_lists(article_sent_tokens))):
                     doc_indices = [0] * len(util.flatten_list_of_lists(article_sent_tokens))

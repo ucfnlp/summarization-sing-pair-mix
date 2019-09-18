@@ -17,7 +17,7 @@ We provide instructions on generating the data for CNN/DailyMail. Email the auth
 
 To generate the CNN/DailyMail data, follow the following steps:
 
-1) Download the zip files from https://github.com/JafferWilson/Process-Data-of-CNN-DailyMail. Unzip and place `cnn_stories_tokenized/`, `dm_stories_tokenized/`, and `url_lists/` (this folder is inside the `FINISHED_FILES` zip file in JafferWilson's link) inside the `./data/cnn_dm_unprocessed/` directory.
+1) Download the zip files from https://github.com/JafferWilson/Process-Data-of-CNN-DailyMail. Unzip and place `cnn_stories_tokenized/` and `dm_stories_tokenized/` inside the `./data/cnn_dm_unprocessed/` directory.
 2) Run the following command to extract the articles and summaries from the CNN/DailyMail data. This will create the `articles.tsv` and `summaries.tsv` files.
 
     ```
@@ -75,7 +75,7 @@ Sentence Fusion model: https://drive.google.com/open?id=1BMcfyFnwJfmjO1Uv-iWdNat
 2) Additionally, convert data to a .tsv format to be input to BERT.
 
     ```
-    python preprocess_for_bert_finetuning.py --dataset_name=cnn_dm
+    python preprocess_for_bert_fine_tuning.py --dataset_name=cnn_dm
     python preprocess_for_bert_article.py --dataset_name=cnn_dm
     python bert/extract_features.py --dataset_name=cnn_dm --layers=-1,-2,-3,-4 --max_seq_length=400 --batch_size=1
     ```
