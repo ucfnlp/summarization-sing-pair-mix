@@ -8,8 +8,10 @@ import util
 from tqdm import tqdm
 import glob
 import multiprocessing as mp
+import sys
 
 FLAGS = flags.FLAGS
+FLAGS(sys.argv)
 
 np.random.seed(123)
 
