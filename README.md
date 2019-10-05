@@ -32,10 +32,10 @@ To generate the CNN/DailyMail data, follow the following steps:
 Four files will appear in the newly-created ./data/cnn_dm_processed directory. Each of the .tsv files will have the same number of lines.
 
 * `articles.tsv`
-    * 1 article per line, tab-separated list of sentences
+    * 1 article per line, tab-separated list of sentences. Each sentence is tokenized, where each token is separated by a space (" ").
 
 * `summaries.tsv`
-    * 1 summary per line, tab-separated list of sentences
+    * 1 summary per line, tab-separated list of sentences. Each sentence is tokenized, where each token is separated by a space (" ").
 
 * `highlights.tsv`
     * 1 set of fusion examples per line, tab-separated list of fusion examples. The number of fusion examples corresponds to the same number of summary sentences in the same line in summaries.tsv. Each fusion example is either 0, 1, or 2 source indices (separated by ",") representing which sentences from the article were fused together to form the summary sentence.
@@ -43,6 +43,9 @@ Four files will appear in the newly-created ./data/cnn_dm_processed directory. E
 * `pretty_html.html`
     * Examples highlighting which sentences were fused together to form summary sentences
 
+# I have my own data, and I want to generate the singletons/pairs of sentences from my data
+
+Follow the steps in "Generating the data," but you may skip steps 1 and 2. Instead, you must generate the two files "article.tsv" and "summaries.tsv" (format is described above after step 3). After you have created those two files, then run step 3.
 
 
 # Summary Outputs
