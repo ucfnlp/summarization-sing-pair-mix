@@ -91,9 +91,11 @@ Sentence Fusion model: https://drive.google.com/open?id=1BMcfyFnwJfmjO1Uv-iWdNat
 
 2) Train the BERT model to predict whether a given sentence singleton/pair is likely to create a summary sentence or not.
 
+    ```
     cd bert/
     python run_classifier.py --task_name=merge --do_train --do_eval --dataset_name=cnn_dm --num_train_epochs=1000.0
     cd ..
+    ```
     
 
 ### Training sentence fusion model
