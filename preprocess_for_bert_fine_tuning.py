@@ -110,7 +110,7 @@ def main(unused_argv):
                     example, names_to_types)
                 article_sent_tokens = [util.process_sent(sent, whitespace=True) for sent in raw_article_sents]
                 groundtruth_summ_sents = [[sent.strip() for sent in groundtruth_summary_text.strip().split('\n')]]
-                if doc_indices is None or (dataset_name != 'duc_2004' and len(doc_indices) != len(util.flatten_list_of_lists(article_sent_tokens))):
+                if dataset_name != 'duc_2004' or doc_indices is None or (dataset_name != 'duc_2004' and len(doc_indices) != len(util.flatten_list_of_lists(article_sent_tokens))):
                     doc_indices = [0] * len(util.flatten_list_of_lists(article_sent_tokens))
                 doc_indices = [int(doc_idx) for doc_idx in doc_indices]
                 rel_sent_indices, _, _ = ssi_functions.get_rel_sent_indices(doc_indices, article_sent_tokens)

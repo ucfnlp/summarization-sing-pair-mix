@@ -268,7 +268,10 @@ def get_rel_sent_indices(doc_indices, article_sent_tokens):
     if FLAGS.dataset_name != 'duc_2004' and len(doc_indices) != len(util.flatten_list_of_lists(article_sent_tokens)):
         doc_indices = [0] * len(util.flatten_list_of_lists(article_sent_tokens))
     doc_indices_sent_tokens = util.reshape_like(doc_indices, article_sent_tokens)
-    sent_doc = [sent[0] for sent in doc_indices_sent_tokens]
+    if FLAGS.dataset_name != 'duc_2004':
+        sent_doc = [0] * len(doc_indices_sent_tokens)
+    else:
+        sent_doc = [sent[0] for sent in doc_indices_sent_tokens]
     rel_sent_indices = []
     doc_sent_indices = []
     cur_doc_idx = 0
