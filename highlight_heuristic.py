@@ -11,7 +11,6 @@ import multiprocessing as mp
 import sys
 
 FLAGS = flags.FLAGS
-FLAGS(sys.argv)
 
 np.random.seed(123)
 
