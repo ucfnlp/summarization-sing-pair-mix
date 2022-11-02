@@ -48,21 +48,19 @@ Four files will appear in the newly-created ./data/cnn_dm_processed directory. E
 Follow the steps in "Generating the data," but you may skip steps 1 and 2. Instead, you must generate the two files "article.tsv" and "summaries.tsv" (format is described above after step 3). After you have created those two files, then run step 3.
 
 
-# Summary Outputs
+# Summary Outputs and Models
 
-For CNN/DailyMail:
+Summary outputs and models: https://www.dropbox.com/sh/g34aj101oauwlx3/AAA9dNhGlgVDQFiQrAqfMaKIa/Scoring%20Sentence%20Singletons%20and%20Pairs%20for%20Abstractive%20Summarization?dl=0
 
-BERT-Extr summaries (see paper for more details): https://drive.google.com/open?id=19Ixgdmp5wCRg-1x2runvstCqm6O8zlRw
+It includes the following (only for CNN/DailyMail):
 
-BERT-Abs w/ PG summaries (see paper for more details): https://drive.google.com/open?id=1UNftonJgDRTtMBkBk02_-LQAkK3wC0_k
+- BERT-Extr summaries (see paper for more details)
 
-# Models
+- BERT-Abs w/ PG summaries (see paper for more details)
 
-For CNN/DailyMail:
+- Content Selection model (corresponds to BERT-Extr)
 
-Content Selection model (corresponds to BERT-Extr): https://drive.google.com/open?id=16sDOQWBxnIcvLTzv_HZEf9IBt6xqfrdL
-
-Sentence Fusion model: https://drive.google.com/open?id=1BMcfyFnwJfmjO1Uv-iWdNatjtp1aOJvf
+- Sentence Fusion model
 (The sentence fusion model reads from a file `logs/cnn_dm_bert_both/ssi.pkl` which contains the sentence singletons/pairs that were chosen by the content selection model.)
 
 # How to run the code
